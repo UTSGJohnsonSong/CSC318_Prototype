@@ -6,7 +6,20 @@ function getPinTone(status) {
   return "tone-busy";
 }
 
-export default function MapPanel({ trucks, selectedTruckId, onPinSelect }) {
+export default function MapPanel({
+  trucks,
+  selectedTruckId,
+  onPinSelect,
+  recenterSignal,
+  matchedTruckIds = [],
+  queryActive = false
+}) {
+  const DEFAULT_ZOOM = 2.1;
+  const CENTER_ANCHOR_X = 0.42;
+  const CENTER_ANCHOR_Y = 0.24;
+  const mapInsetRatio = 0.08;
+  const PAN_OVERSCAN_X = 0.7;
+  const PAN_OVERSCAN_Y = 0.9;
   const mapRef = useRef(null);
   const dragStateRef = useRef({
     dragging: false,
@@ -15,25 +28,37 @@ export default function MapPanel({ trucks, selectedTruckId, onPinSelect }) {
     baseX: 0,
     baseY: 0
   });
-  const [offset, setOffset] = useState({ x: -34, y: 12 });
-  const [zoom, setZoom] = useState(1.38);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const userLocation = { x: 62, y: 62 };
+  const matchedSet = useMemo(() => new Set(matchedTruckIds), [matchedTruckIds]);
 
-  const clampZoom = (value) => Math.max(1.2, Math.min(2.05, value));
+  const clampZoom = (value) => Math.max(1.15, Math.min(3.2, value));
 
   const clampOffset = useMemo(
     () => (nextX, nextY) => {
       if (!mapRef.current) return { x: nextX, y: nextY };
       const rect = mapRef.current.getBoundingClientRect();
-      const marginX = rect.width * 0.22;
-      const marginY = rect.height * 0.18;
-      const maxX = ((zoom - 1) * rect.width) / 2 + marginX;
-      const maxY = ((zoom - 1) * rect.height) / 2 + marginY;
+      const contentWidth = rect.width * (1 + mapInsetRatio * 2);
+      const contentHeight = rect.height * (1 + mapInsetRatio * 2);
+      const contentLeft = -mapInsetRatio * rect.width;
+      const contentTop = -mapInsetRatio * rect.height;
+      const extraX = (rect.width * PAN_OVERSCAN_X) / zoom;
+      const extraY = (rect.height * PAN_OVERSCAN_Y) / zoom;
+
+      // transform order is translate(...) scale(...), so solve clamp bounds in pre-scale coords.
+      // Keep viewport always covered by content while allowing panning across full map extent.
+      const minX = rect.width / zoom - contentLeft - contentWidth - extraX;
+      const maxX = -contentLeft + extraX;
+      const minY = rect.height / zoom - contentTop - contentHeight - extraY;
+      const maxY = -contentTop + extraY;
+
       return {
-        x: Math.max(-maxX, Math.min(maxX, nextX)),
-        y: Math.max(-maxY, Math.min(maxY, nextY))
+        x: Math.max(minX, Math.min(maxX, nextX)),
+        y: Math.max(minY, Math.min(maxY, nextY))
       };
     },
-    [zoom]
+    [mapInsetRatio, zoom]
   );
 
   useEffect(() => {
@@ -80,6 +105,51 @@ export default function MapPanel({ trucks, selectedTruckId, onPinSelect }) {
     setZoom((prev) => clampZoom(prev + direction * 0.08));
   };
 
+  const centerOnPoint = (xPercent, yPercent, zoomValue = zoom) => {
+    if (!mapRef.current) return;
+    const rect = mapRef.current.getBoundingClientRect();
+    const contentWidth = rect.width * (1 + mapInsetRatio * 2);
+    const contentHeight = rect.height * (1 + mapInsetRatio * 2);
+    const contentLeft = -mapInsetRatio * rect.width;
+    const contentTop = -mapInsetRatio * rect.height;
+    const baseX = contentLeft + (xPercent / 100) * contentWidth;
+    const baseY = contentTop + (yPercent / 100) * contentHeight;
+    const targetX = rect.width * CENTER_ANCHOR_X - zoomValue * baseX;
+    const targetY = rect.height * CENTER_ANCHOR_Y - zoomValue * baseY;
+    const next = clampOffset(targetX, targetY);
+    setOffset(next);
+  };
+
+  const centerOnUser = (zoomValue = zoom) => {
+    centerOnPoint(userLocation.x, userLocation.y, zoomValue);
+  };
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      setZoom(DEFAULT_ZOOM);
+      centerOnUser(DEFAULT_ZOOM);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [recenterSignal]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      setZoom(DEFAULT_ZOOM);
+      centerOnUser(DEFAULT_ZOOM);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
+    if (!queryActive) return;
+    const selectedTruck = trucks.find((truck) => truck.id === selectedTruckId);
+    if (!selectedTruck) return;
+    const raf = requestAnimationFrame(() => {
+      centerOnPoint(selectedTruck.mapX, selectedTruck.mapY, DEFAULT_ZOOM);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [queryActive, selectedTruckId, trucks]);
+
   return (
     <section className="map-panel" aria-label="Campus food truck map">
       <div
@@ -95,16 +165,28 @@ export default function MapPanel({ trucks, selectedTruckId, onPinSelect }) {
           }}
         >
           <img className="map-image" src="/UniversityofTorontoMap.png" alt="UofT campus map" />
+          <div
+            className="user-location"
+            style={{ left: `${userLocation.x}%`, top: `${userLocation.y}%` }}
+            aria-label="Your current location"
+          >
+            <span className="user-halo" />
+            <span className="user-dot" />
+          </div>
           {trucks.map((truck) => {
             const isSelected = selectedTruckId === truck.id;
+            const isMatch = !queryActive || matchedSet.has(truck.id);
             return (
               <button
                 key={truck.id}
                 type="button"
-                className={`map-pin ${getPinTone(truck.status)} ${isSelected ? "selected" : ""}`}
+                className={`map-pin ${getPinTone(truck.status)} ${isSelected ? "selected" : ""} ${
+                  isMatch ? "" : "dimmed"
+                }`}
                 style={{ left: `${truck.mapX}%`, top: `${truck.mapY}%` }}
                 onClick={() => onPinSelect(truck.id)}
                 aria-label={`${truck.name}, ${truck.waitTimeMin} minute wait`}
+                disabled={!isMatch}
               >
                 <span>{truck.waitTimeMin}m</span>
               </button>

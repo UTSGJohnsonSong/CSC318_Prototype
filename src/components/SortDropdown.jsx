@@ -1,8 +1,8 @@
 const sortOptions = [
-  "Shortest Wait",
+  "Fastest",
   "Closest",
-  "Most Recommended",
-  "Open Now"
+  "Shortest Wait",
+  "Recommended"
 ];
 
 export default function SortDropdown({ currentSort, onSelect }) {

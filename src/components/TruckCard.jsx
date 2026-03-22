@@ -4,7 +4,28 @@ function getStatusTone(status) {
   return "badge-busy";
 }
 
-export default function TruckCard({ truck, selected, onSelect }) {
+function highlightMatch(text, query) {
+  const trimmed = query.trim();
+  if (!trimmed) return text;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = trimmed.toLowerCase();
+  const index = lowerText.indexOf(lowerQuery);
+  if (index === -1) return text;
+
+  const before = text.slice(0, index);
+  const matched = text.slice(index, index + trimmed.length);
+  const after = text.slice(index + trimmed.length);
+
+  return (
+    <>
+      {before}
+      <mark className="search-highlight-mark">{matched}</mark>
+      {after}
+    </>
+  );
+}
+
+export default function TruckCard({ truck, selected, onSelect, query = "" }) {
   return (
     <button
       type="button"
@@ -22,8 +43,8 @@ export default function TruckCard({ truck, selected, onSelect }) {
       <div className="truck-content">
         <div className="truck-main-row">
           <div>
-            <div className="truck-name">{truck.name}</div>
-            <div className="truck-cuisine">{truck.cuisine}</div>
+            <div className="truck-name">{highlightMatch(truck.name, query)}</div>
+            <div className="truck-cuisine">{highlightMatch(truck.cuisine, query)}</div>
           </div>
           <div className="wait-time">
             <span className="wait-value">{truck.waitTimeMin} min</span>

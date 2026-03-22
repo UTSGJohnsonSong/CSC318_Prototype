@@ -29,6 +29,8 @@ export const trucks = [
     badge: "Shortest Wait",
     image: "Luchi",
     imageSrc: littlePinkHeroImage,
+    searchFoods: ["curry chicken rice", "beef brisket rice", "rice bowl", "lunch combo"],
+    intentTags: ["quick", "cheap lunch", "open now", "comfort food"],
     menu: [
       {
         id: "japanese-curry-chicken-rice",
@@ -47,8 +49,8 @@ export const trucks = [
         imageSrc: littlePinkBeefImage
       }
     ],
-    mapX: 69,
-    mapY: 78
+    mapX: 54,
+    mapY: 61
   },
   {
     id: "jianbing-grain",
@@ -63,8 +65,10 @@ export const trucks = [
     badge: "Open Now",
     image: "Jianbing",
     imageSrc: jianbingHeroImage,
-    mapX: 43,
-    mapY: 35
+    searchFoods: ["jianbing", "crepe", "bubble tea", "soy milk"],
+    intentTags: ["vegetarian", "quick", "cheap", "snack"],
+    mapX: 40,
+    mapY: 40
   },
   {
     id: "rb-red",
@@ -79,8 +83,10 @@ export const trucks = [
     badge: "Busy",
     image: "RB",
     imageSrc: redGrillHeroImage,
-    mapX: 51,
-    mapY: 48
+    searchFoods: ["fried chicken", "hot dog", "grill platter"],
+    intentTags: ["halal", "protein", "late lunch"],
+    mapX: 59,
+    mapY: 69
   },
   {
     id: "middle-east-flame",
@@ -95,8 +101,10 @@ export const trucks = [
     badge: "Top Rated",
     image: "Flame",
     imageSrc: flameHeroImage,
-    mapX: 56,
-    mapY: 57
+    searchFoods: ["shawarma", "kebab", "falafel wrap"],
+    intentTags: ["halal", "quick", "open now"],
+    mapX: 46,
+    mapY: 50
   },
   {
     id: "white-chinese",
@@ -111,8 +119,10 @@ export const trucks = [
     badge: "Closest",
     image: "White",
     imageSrc: whiteChineseHeroImage,
-    mapX: 65,
-    mapY: 73
+    searchFoods: ["dumplings", "noodles", "rice plate"],
+    intentTags: ["cheap lunch", "family portions", "open now"],
+    mapX: 57,
+    mapY: 66
   },
   {
     id: "blue-truck",
@@ -127,7 +137,9 @@ export const trucks = [
     badge: "Open Now",
     image: "Blue",
     imageSrc: blueTruckHeroImage,
-    mapX: 39,
-    mapY: 29
+    searchFoods: ["burger", "fries", "fried chicken sandwich"],
+    intentTags: ["quick", "cheap", "grab and go"],
+    mapX: 52,
+    mapY: 58
   }
 ];

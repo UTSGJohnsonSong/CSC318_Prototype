@@ -4,6 +4,8 @@ import SearchBar from "./components/SearchBar";
 import SortDropdown from "./components/SortDropdown";
 import MapPanel from "./components/MapPanel";
 import TruckCard from "./components/TruckCard";
+import SearchAssistPanel from "./components/SearchAssistPanel";
+import MobileKeyboardMock from "./components/MobileKeyboardMock";
 import TruckDetailScreen from "./components/TruckDetailScreen";
 import CheckoutScreen from "./components/CheckoutScreen";
 import OrderConfirmationScreen from "./components/OrderConfirmationScreen";
@@ -15,13 +17,13 @@ function getCartItemKey(truckId, itemId) {
 
 function sortTrucks(data, sortType) {
   const next = [...data];
-  if (sortType === "Shortest Wait") {
+  if (sortType === "Fastest" || sortType === "Shortest Wait") {
     return next.sort((a, b) => a.waitTimeMin - b.waitTimeMin);
   }
   if (sortType === "Closest") {
     return next.sort((a, b) => a.walkTimeMin - b.walkTimeMin);
   }
-  if (sortType === "Most Recommended") {
+  if (sortType === "Recommended" || sortType === "Most Recommended") {
     return next.sort((a, b) => {
       if (b.rating !== a.rating) return b.rating - a.rating;
       return b.reviewCount - a.reviewCount;
@@ -38,9 +40,76 @@ function sortTrucks(data, sortType) {
   return next;
 }
 
+const SEARCH_RECENT_DEFAULT = [
+  { label: "fried chicken", kind: "query" },
+  { label: "bubble tea", kind: "query" },
+  { label: "Ali's Wraps", kind: "query" },
+  { label: "Blue Truck", kind: "entity" }
+];
+
+function normalizeText(value) {
+  return value.toLowerCase().trim();
+}
+
+function isMeaningfulSearchTerm(value) {
+  const term = value.trim();
+  if (term.length < 3) return false;
+  if (!/[a-zA-Z]/.test(term)) return false;
+  return true;
+}
+
+function normalizeRecentEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === "string") {
+    const label = entry.trim();
+    if (!isMeaningfulSearchTerm(label)) return null;
+    return { label, kind: "query" };
+  }
+  if (typeof entry === "object" && typeof entry.label === "string") {
+    const label = entry.label.trim();
+    if (!isMeaningfulSearchTerm(label)) return null;
+    return {
+      label,
+      kind: entry.kind === "entity" ? "entity" : "query"
+    };
+  }
+  return null;
+}
+
+function getTruckSearchScore(truck, query) {
+  const normalized = normalizeText(query);
+  if (!normalized) return 0;
+
+  let score = 0;
+  const name = normalizeText(truck.name);
+  const cuisine = normalizeText(truck.cuisine);
+  const foods = (truck.searchFoods ?? []).map(normalizeText);
+  const intents = (truck.intentTags ?? []).map(normalizeText);
+
+  if (name.includes(normalized)) score += name.startsWith(normalized) ? 12 : 8;
+  if (cuisine.includes(normalized)) score += 6;
+  if (foods.some((food) => food.includes(normalized))) score += 7;
+  if (intents.some((tag) => tag.includes(normalized))) score += 9;
+
+  if (normalized.includes("open") && truck.status === "open") score += 7;
+  if ((normalized.includes("quick") || normalized.includes("fast")) && truck.waitTimeMin <= 9) score += 6;
+  if (normalized.includes("cheap") && truck.walkTimeMin <= 8) score += 4;
+  if (normalized.includes("shortest wait") && truck.waitTimeMin <= 9) score += 8;
+  if (normalized.includes("under 15 min") && truck.waitTimeMin + truck.walkTimeMin <= 15) score += 10;
+  if (normalized.includes("under $15") || normalized.includes("under 15")) {
+    if (intents.some((tag) => tag.includes("cheap"))) score += 9;
+  }
+  if (normalized.includes("closest") && truck.walkTimeMin <= 5) score += 8;
+
+  return score;
+}
+
 export default function App() {
-  const [sortType, setSortType] = useState("Shortest Wait");
+  const [sortType, setSortType] = useState("Fastest");
   const [sortVisible, setSortVisible] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(SEARCH_RECENT_DEFAULT);
   const [selectedTruckId, setSelectedTruckId] = useState("luchi-pink");
   const [focusedTruckId, setFocusedTruckId] = useState(null);
   const [activeTruckId, setActiveTruckId] = useState(null);
@@ -50,8 +119,9 @@ export default function App() {
   const [cartItems, setCartItems] = useState({});
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [pickupName, setPickupName] = useState("");
+  const [recenterSignal, setRecenterSignal] = useState(0);
   const [mapStackHeight, setMapStackHeight] = useState(0);
-  const [sheetHeight, setSheetHeight] = useState(220);
+  const [sheetHeight, setSheetHeight] = useState(190);
   const [sheetDragging, setSheetDragging] = useState(false);
   const mapStackRef = useRef(null);
   const sheetDragRef = useRef({
@@ -61,23 +131,103 @@ export default function App() {
   });
 
   const sortedTrucks = useMemo(() => sortTrucks(trucks, sortType), [sortType]);
+  const isSearchMode = searchFocused;
+  const queryActive = searchQuery.trim().length > 0;
+  const searchRankedTrucks = useMemo(() => {
+    if (!queryActive) return sortedTrucks;
+
+    return [...sortedTrucks]
+      .map((truck) => ({
+        truck,
+        score: getTruckSearchScore(truck, searchQuery)
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.truck.waitTimeMin - b.truck.waitTimeMin;
+      })
+      .map((item) => item.truck);
+  }, [queryActive, searchQuery, sortedTrucks]);
+
+  const groupedSuggestions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return { trucks: [], foods: [], categories: [] };
+    }
+
+    const truckSuggestions = sortedTrucks
+      .filter((truck) => truck.name.toLowerCase().includes(query))
+      .slice(0, 4)
+      .map((truck) => ({ label: truck.name, value: truck.name, hint: "Truck" }));
+
+    const foodPool = Array.from(
+      new Set(sortedTrucks.flatMap((truck) => truck.searchFoods ?? []).map((food) => food.trim()))
+    );
+    const foodSuggestions = foodPool
+      .filter((food) => food.toLowerCase().includes(query))
+      .slice(0, 4)
+      .map((food) => ({ label: food, value: food, hint: "Food" }));
+
+    const categoryPool = Array.from(
+      new Set([
+        ...sortedTrucks.map((truck) => truck.cuisine),
+        ...sortedTrucks.flatMap((truck) => truck.intentTags ?? [])
+      ])
+    );
+    const categorySuggestions = categoryPool
+      .filter((value) => value.toLowerCase().includes(query))
+      .slice(0, 4)
+      .map((value) => ({ label: value, value, hint: "Category" }));
+
+    return {
+      trucks: truckSuggestions,
+      foods: foodSuggestions,
+      categories: categorySuggestions
+    };
+  }, [searchQuery, sortedTrucks]);
+
+  const cleanRecentSearches = useMemo(
+    () =>
+      recentSearches
+        .map(normalizeRecentEntry)
+        .filter(Boolean)
+        .slice(0, 6),
+    [recentSearches]
+  );
+
   const displayedTrucks = useMemo(() => {
-    if (!focusedTruckId) return sortedTrucks;
-    return sortedTrucks.filter((truck) => truck.id === focusedTruckId);
-  }, [focusedTruckId, sortedTrucks]);
+    const source = queryActive ? searchRankedTrucks : sortedTrucks;
+    if (!focusedTruckId) return source;
+    return source.filter((truck) => truck.id === focusedTruckId);
+  }, [focusedTruckId, queryActive, searchRankedTrucks, sortedTrucks]);
 
   useEffect(() => {
-    const stillExists = sortedTrucks.some((truck) => truck.id === selectedTruckId);
-    if (!stillExists && sortedTrucks.length > 0) {
-      setSelectedTruckId(sortedTrucks[0].id);
+    const stillExists = displayedTrucks.some((truck) => truck.id === selectedTruckId);
+    if (!stillExists && displayedTrucks.length > 0) {
+      setSelectedTruckId(displayedTrucks[0].id);
     }
-  }, [selectedTruckId, sortedTrucks]);
+  }, [selectedTruckId, displayedTrucks]);
 
   useEffect(() => {
     if (!focusedTruckId) return;
-    const exists = sortedTrucks.some((truck) => truck.id === focusedTruckId);
+    const exists = displayedTrucks.some((truck) => truck.id === focusedTruckId);
     if (!exists) setFocusedTruckId(null);
-  }, [focusedTruckId, sortedTrucks]);
+  }, [focusedTruckId, displayedTrucks]);
+
+  useEffect(() => {
+    if (!queryActive) return;
+    if (!searchRankedTrucks.length) return;
+    setSelectedTruckId(searchRankedTrucks[0].id);
+  }, [queryActive, searchRankedTrucks]);
+
+  useEffect(() => {
+    setRecentSearches((prev) =>
+      prev
+        .map(normalizeRecentEntry)
+        .filter(Boolean)
+        .slice(0, 6)
+    );
+  }, []);
 
   const activeTruck = sortedTrucks.find((truck) => truck.id === activeTruckId) ?? null;
   const allMenuItems = useMemo(
@@ -122,13 +272,13 @@ export default function App() {
     if (!mapStackHeight) {
       return {
         hidden,
-        peek: 220,
+        peek: 190,
         expanded: 420
       };
     }
     return {
       hidden,
-      peek: Math.round(mapStackHeight * 0.34),
+      peek: Math.round(mapStackHeight * 0.28),
       expanded: Math.round(mapStackHeight * 0.76)
     };
   }, [mapStackHeight]);
@@ -196,9 +346,44 @@ export default function App() {
     setSortType(option);
   };
 
+  const applySearch = (value) => {
+    setSearchQuery(value);
+    setFocusedTruckId(null);
+  };
+
+  const commitRecentSearch = (value, kind = "query") => {
+    if (!isMeaningfulSearchTerm(value)) return;
+    const normalized = value.trim();
+    setRecentSearches((prev) => {
+      const merged = [
+        { label: normalized, kind },
+        ...prev
+          .map(normalizeRecentEntry)
+          .filter(Boolean)
+          .filter((entry) => entry.label.toLowerCase() !== normalized.toLowerCase())
+      ];
+      return merged.slice(0, 6);
+    });
+  };
+
+  const handleSearchSubmit = (value) => {
+    const term = value.trim();
+    if (!term) return;
+    applySearch(term);
+    commitRecentSearch(term, "query");
+    setSearchFocused(false);
+  };
+
+  const handleSearchCancel = () => {
+    setSearchQuery("");
+    setSearchFocused(false);
+    setFocusedTruckId(null);
+  };
+
   const handleMapPinSelect = (truckId) => {
     setSelectedTruckId(truckId);
     setFocusedTruckId(truckId);
+    setSearchFocused(false);
   };
 
   const handleTruckOpen = (truckId) => {
@@ -261,6 +446,7 @@ export default function App() {
   };
 
   const handleSheetPointerDown = (event) => {
+    if (searchFocused) return;
     sheetDragRef.current.dragging = true;
     sheetDragRef.current.startY = event.clientY;
     sheetDragRef.current.startHeight = sheetHeight;
@@ -268,6 +454,7 @@ export default function App() {
   };
 
   const sheetCollapsed = sheetHeight <= sheetSnapPoints.hidden + 8;
+  const hideRecenter = sheetHeight >= sheetSnapPoints.expanded - 6;
 
   if (activeTruck) {
     if (confirmationOpen) {
@@ -328,30 +515,68 @@ export default function App() {
       <main className="browse-screen">
         <header className="top-area">
           <SearchBar
+            value={searchQuery}
+            focused={searchFocused}
+            onFocus={() => setSearchFocused(true)}
+            onChange={applySearch}
+            onSubmit={handleSearchSubmit}
+            onClear={() => setSearchQuery("")}
+            onCancel={handleSearchCancel}
             sortVisible={sortVisible}
-            onToggleSort={() => setSortVisible((prev) => !prev)}
+            onToggleSort={() => {
+              if (searchFocused) return;
+              setSortVisible((prev) => !prev);
+            }}
           />
         </header>
 
-        <section className="map-stack" ref={mapStackRef}>
+        <section className={`map-stack ${isSearchMode ? "search-mode" : ""}`} ref={mapStackRef}>
           <MapPanel
             trucks={sortedTrucks}
             selectedTruckId={selectedTruckId}
             onPinSelect={handleMapPinSelect}
+            recenterSignal={recenterSignal}
+            queryActive={queryActive}
+            matchedTruckIds={searchRankedTrucks.map((truck) => truck.id)}
           />
+          <div className={`search-mode-dimmer ${isSearchMode ? "visible" : ""}`} aria-hidden="true" />
           <div
-            className={`sort-overlay ${sortVisible ? "visible" : "hidden"}`}
-            aria-hidden={!sortVisible}
+            className={`sort-overlay ${sortVisible && !searchFocused ? "visible" : "hidden"}`}
+            aria-hidden={!sortVisible || searchFocused}
           >
             <SortDropdown
               currentSort={sortType}
               onSelect={handleSortSelect}
             />
           </div>
+          <SearchAssistPanel
+            focused={searchFocused}
+            query={searchQuery}
+            totalResults={searchRankedTrucks.length}
+            searchResults={searchRankedTrucks}
+            groupedSuggestions={groupedSuggestions}
+            recentSearches={cleanRecentSearches}
+            onSelectSuggestion={(value) => {
+              applySearch(value);
+              commitRecentSearch(value, "query");
+              setSearchFocused(false);
+            }}
+            onSelectResult={(truckId) => {
+              setSelectedTruckId(truckId);
+              setFocusedTruckId(truckId);
+              const truck = sortedTrucks.find((item) => item.id === truckId);
+              if (truck) {
+                setSearchQuery(truck.name);
+                commitRecentSearch(truck.name, "entity");
+              }
+              setSearchFocused(false);
+            }}
+          />
 
           <section
             className={`truck-sheet ${sheetCollapsed ? "collapsed" : ""} ${
               sheetDragging ? "dragging" : ""
+            } ${searchFocused ? "keyboard-active search-hidden" : ""
             }`}
             style={{ height: `${sheetHeight}px` }}
             aria-label="Nearby trucks overlay"
@@ -368,7 +593,9 @@ export default function App() {
                   ? "Nearby Trucks"
                   : focusedTruckId
                     ? "1 Truck Selected"
-                    : `${sortedTrucks.length} Trucks Nearby`}
+                    : queryActive
+                      ? `${displayedTrucks.length} Search Matches`
+                      : "Showing 6 nearby · UofT St. George"}
               </span>
             </button>
             {focusedTruckId && (
@@ -390,11 +617,33 @@ export default function App() {
                     truck={truck}
                     selected={truck.id === selectedTruckId}
                     onSelect={handleTruckOpen}
+                    query={searchQuery}
                   />
                 ))}
+                {queryActive && displayedTrucks.length === 0 ? (
+                  <div className="sheet-empty-state">
+                    <p>No trucks match this search.</p>
+                    <span>Try “cheap lunch”, “bubble tea”, or “halal”.</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>
+          <button
+            type="button"
+            className={`map-recenter-fab ${hideRecenter || searchFocused ? "hidden" : ""}`}
+            style={{ bottom: `${sheetHeight + 10}px` }}
+            onClick={() => setRecenterSignal((prev) => prev + 1)}
+            aria-label="Center map on your location"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M19 4L5.5 10.2C4.7 10.6 4.8 11.8 5.7 12L11.3 13.5L12.8 19.1C13 20 14.2 20.1 14.6 19.3L20.8 5.8C21.2 5 20.5 3.6 19 4Z"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
+          <MobileKeyboardMock visible={searchFocused} />
         </section>
       </main>
     </MobileShell>
