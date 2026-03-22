@@ -1,7 +1,24 @@
+const littlePinkHeroImage = new URL("../../1.jpg", import.meta.url).href;
+const jianbingHeroImage = new URL("../../8.jpg", import.meta.url).href;
+const redGrillHeroImage = new URL("../../3.jpg", import.meta.url).href;
+const flameHeroImage = new URL("../../4.jpg", import.meta.url).href;
+const whiteChineseHeroImage = new URL("../../5.jpg", import.meta.url).href;
+const blueTruckHeroImage = new URL("../../6.jpg", import.meta.url).href;
+
+const littlePinkCurryImage = new URL(
+  "../../Little_Pink_Truck_List/JapaneseCurryChickenRice.jpg",
+  import.meta.url
+).href;
+
+const littlePinkBeefImage = new URL(
+  "../../Little_Pink_Truck_List/BraisedBeefBrisketRice.jpg",
+  import.meta.url
+).href;
+
 export const trucks = [
   {
     id: "luchi-pink",
-    name: "Pink Street Eats Truck",
+    name: "UT Little Pink Truck",
     cuisine: "Chinese Snacks",
     rating: 4.7,
     reviewCount: 286,
@@ -11,7 +28,25 @@ export const trucks = [
     trustNote: "Updated 2 min ago",
     badge: "Shortest Wait",
     image: "Luchi",
-    imageSrc: "/1.jpg",
+    imageSrc: littlePinkHeroImage,
+    menu: [
+      {
+        id: "japanese-curry-chicken-rice",
+        name: "Japanese Curry Chicken Rice",
+        priceCad: 15.59,
+        priceRmb: 78.29,
+        description: "Japanese curry, chicken, and rice.",
+        imageSrc: littlePinkCurryImage
+      },
+      {
+        id: "braised-beef-brisket-rice",
+        name: "Braised Beef Brisket Rice",
+        priceCad: 16.79,
+        priceRmb: 84.32,
+        description: "Braised beef brisket served over rice.",
+        imageSrc: littlePinkBeefImage
+      }
+    ],
     mapX: 69,
     mapY: 78
   },
@@ -27,7 +62,7 @@ export const trucks = [
     trustNote: "Based on recent orders",
     badge: "Open Now",
     image: "Jianbing",
-    imageSrc: "/8.jpg",
+    imageSrc: jianbingHeroImage,
     mapX: 43,
     mapY: 35
   },
@@ -43,7 +78,7 @@ export const trucks = [
     trustNote: "Updated 4 min ago",
     badge: "Busy",
     image: "RB",
-    imageSrc: "/3.jpg",
+    imageSrc: redGrillHeroImage,
     mapX: 51,
     mapY: 48
   },
@@ -59,7 +94,7 @@ export const trucks = [
     trustNote: "Based on recent orders",
     badge: "Top Rated",
     image: "Flame",
-    imageSrc: "/4.jpg",
+    imageSrc: flameHeroImage,
     mapX: 56,
     mapY: 57
   },
@@ -75,7 +110,7 @@ export const trucks = [
     trustNote: "Updated 1 min ago",
     badge: "Closest",
     image: "White",
-    imageSrc: "/5.jpg",
+    imageSrc: whiteChineseHeroImage,
     mapX: 65,
     mapY: 73
   },
@@ -91,7 +126,7 @@ export const trucks = [
     trustNote: "Updated 3 min ago",
     badge: "Open Now",
     image: "Blue",
-    imageSrc: "/6.jpg",
+    imageSrc: blueTruckHeroImage,
     mapX: 39,
     mapY: 29
   }

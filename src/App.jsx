@@ -4,7 +4,14 @@ import SearchBar from "./components/SearchBar";
 import SortDropdown from "./components/SortDropdown";
 import MapPanel from "./components/MapPanel";
 import TruckCard from "./components/TruckCard";
+import TruckDetailScreen from "./components/TruckDetailScreen";
+import CheckoutScreen from "./components/CheckoutScreen";
+import OrderConfirmationScreen from "./components/OrderConfirmationScreen";
 import { trucks } from "./data/trucks";
+
+function getCartItemKey(truckId, itemId) {
+  return `${truckId}:${itemId}`;
+}
 
 function sortTrucks(data, sortType) {
   const next = [...data];
@@ -37,6 +44,12 @@ export default function App() {
   const [selectedTruckId, setSelectedTruckId] = useState("luchi-pink");
   const [focusedTruckId, setFocusedTruckId] = useState(null);
   const [activeTruckId, setActiveTruckId] = useState(null);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [cartItems, setCartItems] = useState({});
+  const [confirmedOrder, setConfirmedOrder] = useState(null);
+  const [pickupName, setPickupName] = useState("");
   const [mapStackHeight, setMapStackHeight] = useState(0);
   const [sheetHeight, setSheetHeight] = useState(220);
   const [sheetDragging, setSheetDragging] = useState(false);
@@ -67,6 +80,42 @@ export default function App() {
   }, [focusedTruckId, sortedTrucks]);
 
   const activeTruck = sortedTrucks.find((truck) => truck.id === activeTruckId) ?? null;
+  const allMenuItems = useMemo(
+    () =>
+      trucks.flatMap((truck) =>
+        (truck.menu ?? []).map((item) => ({
+          ...item,
+          itemId: item.id,
+          truckId: truck.id,
+          truckName: truck.name,
+          key: getCartItemKey(truck.id, item.id)
+        }))
+      ),
+    []
+  );
+  const cartLineItems = useMemo(
+    () =>
+      allMenuItems
+        .map((item) => ({
+          ...item,
+          quantity: cartItems[item.key] ?? 0
+        }))
+        .filter((item) => item.quantity > 0),
+    [allMenuItems, cartItems]
+  );
+  const cartItemCount = useMemo(
+    () => cartLineItems.reduce((sum, item) => sum + item.quantity, 0),
+    [cartLineItems]
+  );
+  const cartTotal = useMemo(
+    () => cartLineItems.reduce((sum, item) => sum + item.priceCad * item.quantity, 0),
+    [cartLineItems]
+  );
+  const checkoutTaxFees = useMemo(() => Number((cartTotal * 0.125).toFixed(2)), [cartTotal]);
+  const checkoutTotal = useMemo(
+    () => Number((cartTotal + checkoutTaxFees).toFixed(2)),
+    [cartTotal, checkoutTaxFees]
+  );
 
   const sheetSnapPoints = useMemo(() => {
     const hidden = 56;
@@ -155,6 +204,60 @@ export default function App() {
   const handleTruckOpen = (truckId) => {
     setSelectedTruckId(truckId);
     setActiveTruckId(truckId);
+    setCartOpen(false);
+    setCheckoutOpen(false);
+    setConfirmationOpen(false);
+  };
+
+  const getItemQuantity = (truckId, itemId) => cartItems[getCartItemKey(truckId, itemId)] ?? 0;
+
+  const updateCartQuantity = (truckId, itemId, updater) => {
+    const key = getCartItemKey(truckId, itemId);
+    setCartItems((prev) => {
+      const currentQuantity = prev[key] ?? 0;
+      const nextQuantity =
+        typeof updater === "function" ? updater(currentQuantity) : updater;
+
+      if (nextQuantity <= 0) {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return {
+        ...prev,
+        [key]: nextQuantity
+      };
+    });
+  };
+
+  const handleAddItem = (truckId, itemId) => {
+    updateCartQuantity(truckId, itemId, (current) => current + 1);
+  };
+
+  const handleDecreaseItem = (truckId, itemId) => {
+    updateCartQuantity(truckId, itemId, (current) => current - 1);
+  };
+
+  const handleRemoveItem = (truckId, itemId) => {
+    updateCartQuantity(truckId, itemId, 0);
+  };
+
+  const handleConfirmOrder = () => {
+    if (!activeTruck || !cartLineItems.length) return;
+
+    setConfirmedOrder({
+      truck: activeTruck,
+      items: cartLineItems,
+      pickupName,
+      subtotal: cartTotal,
+      taxFees: checkoutTaxFees,
+      total: checkoutTotal
+    });
+    setCartItems({});
+    setCartOpen(false);
+    setCheckoutOpen(false);
+    setConfirmationOpen(true);
   };
 
   const handleSheetPointerDown = (event) => {
@@ -167,32 +270,55 @@ export default function App() {
   const sheetCollapsed = sheetHeight <= sheetSnapPoints.hidden + 8;
 
   if (activeTruck) {
+    if (confirmationOpen) {
+      return (
+        <MobileShell>
+          <OrderConfirmationScreen
+            order={confirmedOrder}
+            onBack={() => setConfirmationOpen(false)}
+          />
+        </MobileShell>
+      );
+    }
+
+    if (checkoutOpen) {
+      return (
+        <MobileShell>
+          <CheckoutScreen
+            truck={activeTruck}
+            items={cartLineItems}
+            subtotal={cartTotal}
+            taxFees={checkoutTaxFees}
+            total={checkoutTotal}
+            pickupName={pickupName}
+            onPickupNameChange={setPickupName}
+            onBack={() => setCheckoutOpen(false)}
+            onConfirm={handleConfirmOrder}
+          />
+        </MobileShell>
+      );
+    }
+
     return (
       <MobileShell>
-        <main className="details-placeholder-screen">
-          <header className="details-header">
-            <button
-              type="button"
-              className="details-back"
-              onClick={() => setActiveTruckId(null)}
-            >
-              Back
-            </button>
-            <span className="details-title">{activeTruck.name}</span>
-            <span className="details-spacer" />
-          </header>
-          <section className="details-hero">
-            {activeTruck.imageSrc ? (
-              <img src={activeTruck.imageSrc} alt={activeTruck.name} />
-            ) : (
-              <div>{activeTruck.image}</div>
-            )}
-          </section>
-          <section className="details-note">
-            <h2>Truck details page</h2>
-            <p>This screen is ready for your next design pass.</p>
-          </section>
-        </main>
+        <TruckDetailScreen
+          truck={activeTruck}
+          cartOpen={cartOpen}
+          cartItems={cartLineItems}
+          cartTotal={cartTotal}
+          cartCount={cartItemCount}
+          getItemQuantity={getItemQuantity}
+          onAddItem={handleAddItem}
+          onDecreaseItem={handleDecreaseItem}
+          onRemoveItem={handleRemoveItem}
+          onBack={() => setActiveTruckId(null)}
+          onOpenCart={() => setCartOpen(true)}
+          onCloseCart={() => setCartOpen(false)}
+          onCheckout={() => {
+            setCartOpen(false);
+            setCheckoutOpen(true);
+          }}
+        />
       </MobileShell>
     );
   }

@@ -2,8 +2,8 @@ export const truckDirectory = [
   {
     number: 1,
     code: "luchi-pink",
-    displayName: "Pink Street Eats Truck",
-    nicknameZh: "Pink Street Eats Truck",
+    displayName: "UT Little Pink Truck",
+    nicknameZh: "UT Little Pink Truck",
     photoRef: "@1.jpg",
     photoStatus: "provided_pending_confirm"
   },
