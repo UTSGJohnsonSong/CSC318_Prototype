@@ -30,6 +30,8 @@ export default function MapPanel({
   });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [isRecentering, setIsRecentering] = useState(false);
+  const recenterTimerRef = useRef(null);
   const userLocation = { x: 62, y: 62 };
   const matchedSet = useMemo(() => new Set(matchedTruckIds), [matchedTruckIds]);
 
@@ -92,6 +94,7 @@ export default function MapPanel({
   const handlePointerDown = (event) => {
     if (event.target.closest(".map-pin")) return;
     if (event.target.closest(".map-zoom-controls")) return;
+    setIsRecentering(false);
     dragStateRef.current.dragging = true;
     dragStateRef.current.startX = event.clientX;
     dragStateRef.current.startY = event.clientY;
@@ -101,6 +104,7 @@ export default function MapPanel({
 
   const handleWheelZoom = (event) => {
     event.preventDefault();
+    setIsRecentering(false);
     const direction = event.deltaY > 0 ? -1 : 1;
     setZoom((prev) => clampZoom(prev + direction * 0.08));
   };
@@ -126,10 +130,18 @@ export default function MapPanel({
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
+      setIsRecentering(true);
       setZoom(DEFAULT_ZOOM);
       centerOnUser(DEFAULT_ZOOM);
+      if (recenterTimerRef.current) clearTimeout(recenterTimerRef.current);
+      recenterTimerRef.current = setTimeout(() => {
+        setIsRecentering(false);
+      }, 540);
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (recenterTimerRef.current) clearTimeout(recenterTimerRef.current);
+    };
   }, [recenterSignal]);
 
   useEffect(() => {
@@ -159,7 +171,7 @@ export default function MapPanel({
         onWheel={handleWheelZoom}
       >
         <div
-          className="map-content"
+          className={`map-content ${isRecentering ? "recentering" : ""}`}
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`
           }}
@@ -198,7 +210,10 @@ export default function MapPanel({
           <button
             type="button"
             className="map-zoom-button"
-            onClick={() => setZoom((prev) => clampZoom(prev + 0.12))}
+            onClick={() => {
+              setIsRecentering(false);
+              setZoom((prev) => clampZoom(prev + 0.12));
+            }}
             aria-label="Zoom in map"
           >
             +
@@ -206,7 +221,10 @@ export default function MapPanel({
           <button
             type="button"
             className="map-zoom-button"
-            onClick={() => setZoom((prev) => clampZoom(prev - 0.12))}
+            onClick={() => {
+              setIsRecentering(false);
+              setZoom((prev) => clampZoom(prev - 0.12));
+            }}
             aria-label="Zoom out map"
           >
             -
