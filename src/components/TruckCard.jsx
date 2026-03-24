@@ -42,23 +42,24 @@ export default function TruckCard({ truck, selected, onSelect, query = "" }) {
       </div>
       <div className="truck-content">
         <div className="truck-main-row">
-          <div>
-            <div className="truck-name">{highlightMatch(truck.name, query)}</div>
-            <div className="truck-cuisine">{highlightMatch(truck.cuisine, query)}</div>
-          </div>
+          <div className="truck-name">{highlightMatch(truck.name, query)}</div>
           <div className="wait-time">
-            <span className="wait-value">{truck.waitTimeMin} min</span>
-            <span className="wait-label">Est. wait</span>
+            <span className="wait-value">
+              <span className="wait-number">{truck.waitTimeMin}</span>
+              <span className="wait-unit">min</span>
+            </span>
           </div>
         </div>
+        <div className="truck-tag-row">
+          <span className={`status-badge ${getStatusTone(truck.status)}`}>{truck.badge}</span>
+        </div>
+        <div className="truck-cuisine">{highlightMatch(truck.cuisine, query)}</div>
         <div className="truck-metrics">
-          <span className="walk-pill">{truck.walkTimeMin} min walk</span>
-          <span>
-            {truck.rating.toFixed(1)} ({truck.reviewCount})
-          </span>
+          <span>{truck.walkTimeMin} min walk</span>
+          <span>·</span>
+          <span>★{truck.rating.toFixed(1)}</span>
         </div>
         <div className="truck-bottom-row">
-          <span className={`status-badge ${getStatusTone(truck.status)}`}>{truck.badge}</span>
           <span className="trust-note">{truck.trustNote}</span>
         </div>
       </div>

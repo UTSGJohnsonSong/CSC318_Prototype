@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-function getPinTone(status) {
-  if (status === "open") return "tone-fast";
-  if (status === "moderate") return "tone-moderate";
-  return "tone-busy";
+function getPinTone(waitTimeMin) {
+  if (waitTimeMin <= 10) return "tone-green";
+  if (waitTimeMin <= 20) return "tone-yellow";
+  return "tone-red";
 }
 
 export default function MapPanel({
@@ -192,8 +192,8 @@ export default function MapPanel({
               <button
                 key={truck.id}
                 type="button"
-                className={`map-pin ${getPinTone(truck.status)} ${isSelected ? "selected" : ""} ${
-                  isMatch ? "" : "dimmed"
+                className={`map-pin ${getPinTone(truck.waitTimeMin)} ${isSelected ? "selected" : ""} ${
+                  isMatch ? "" : "hidden-by-search"
                 }`}
                 style={{ left: `${truck.mapX}%`, top: `${truck.mapY}%` }}
                 onClick={() => onPinSelect(truck.id)}

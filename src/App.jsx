@@ -9,10 +9,26 @@ import MobileKeyboardMock from "./components/MobileKeyboardMock";
 import TruckDetailScreen from "./components/TruckDetailScreen";
 import CheckoutScreen from "./components/CheckoutScreen";
 import OrderConfirmationScreen from "./components/OrderConfirmationScreen";
+import NavigationStatusScreen from "./components/NavigationStatusScreen";
 import { trucks } from "./data/trucks";
 
 function getCartItemKey(truckId, itemId) {
   return `${truckId}:${itemId}`;
+}
+
+function getTruckInitials(truckName) {
+  return truckName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 4);
+}
+
+function createOrderNumber(truckName) {
+  const prefix = getTruckInitials(truckName) || "FT";
+  const suffix = String(Math.floor(Math.random() * 90 + 10));
+  return `${prefix}-${suffix}`;
 }
 
 function sortTrucks(data, sortType) {
@@ -116,6 +132,7 @@ export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [navigationStatusOpen, setNavigationStatusOpen] = useState(false);
   const [cartItems, setCartItems] = useState({});
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [pickupName, setPickupName] = useState("");
@@ -392,6 +409,7 @@ export default function App() {
     setCartOpen(false);
     setCheckoutOpen(false);
     setConfirmationOpen(false);
+    setNavigationStatusOpen(false);
   };
 
   const getItemQuantity = (truckId, itemId) => cartItems[getCartItemKey(truckId, itemId)] ?? 0;
@@ -430,8 +448,13 @@ export default function App() {
 
   const handleConfirmOrder = () => {
     if (!activeTruck || !cartLineItems.length) return;
+    const createdAtMs = Date.now();
+    const readyAtMs = createdAtMs + activeTruck.waitTimeMin * 60 * 1000;
 
     setConfirmedOrder({
+      orderNumber: createOrderNumber(activeTruck.name),
+      createdAtMs,
+      readyAtMs,
       truck: activeTruck,
       items: cartLineItems,
       pickupName,
@@ -442,6 +465,7 @@ export default function App() {
     setCartItems({});
     setCartOpen(false);
     setCheckoutOpen(false);
+    setNavigationStatusOpen(false);
     setConfirmationOpen(true);
   };
 
@@ -457,12 +481,29 @@ export default function App() {
   const hideRecenter = sheetHeight >= sheetSnapPoints.expanded - 6;
 
   if (activeTruck) {
+    if (navigationStatusOpen) {
+      return (
+        <MobileShell>
+          <NavigationStatusScreen
+            order={confirmedOrder}
+            onBack={() => {
+              setNavigationStatusOpen(false);
+              setConfirmationOpen(true);
+            }}
+          />
+        </MobileShell>
+      );
+    }
+
     if (confirmationOpen) {
       return (
         <MobileShell>
           <OrderConfirmationScreen
             order={confirmedOrder}
             onBack={() => setConfirmationOpen(false)}
+            onNavigate={() => {
+              setNavigationStatusOpen(true);
+            }}
           />
         </MobileShell>
       );

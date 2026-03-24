@@ -59,12 +59,22 @@ function formatWaitRange(waitTimeMin) {
   return `${waitTimeMin}-${waitTimeMin + 4} min`;
 }
 
-export default function OrderConfirmationScreen({ order, onBack }) {
+function getTruckInitials(truckName) {
+  return truckName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 4);
+}
+
+export default function OrderConfirmationScreen({ order, onBack, onNavigate }) {
   if (!order) return null;
 
   const firstItem = order.items[0];
   const pickupTime = formatPickupClock(order.truck.waitTimeMin);
   const location = order.truck.location ?? "St. George Campus, University of Toronto";
+  const orderNumberFallback = `${getTruckInitials(order.truck.name) || "FT"}-00`;
 
   return (
     <main className="checkout-screen">
@@ -81,6 +91,9 @@ export default function OrderConfirmationScreen({ order, onBack }) {
           <div className="confirmation-status">
             <CheckIcon />
             <h1 className="confirmation-title">Order placed!</h1>
+            <p className="confirmation-order-number">
+              Order #{order.orderNumber ?? orderNumberFallback}
+            </p>
             <p className="confirmation-copy">
               Your order has been received by {order.truck.name}.
             </p>
@@ -119,7 +132,7 @@ export default function OrderConfirmationScreen({ order, onBack }) {
           </div>
 
           <div className="confirmation-actions">
-            <button type="button" className="sticky-cta">
+            <button type="button" className="sticky-cta" onClick={onNavigate}>
               Navigate
             </button>
             <button type="button" className="details-secondary-action">
