@@ -5,9 +5,7 @@ export default function SearchBar({
   onChange,
   onSubmit,
   onClear,
-  onCancel,
-  sortVisible,
-  onToggleSort
+  onCancel
 }) {
   return (
     <div className={`search-wrap ${focused ? "focused" : ""}`}>
@@ -45,23 +43,7 @@ export default function SearchBar({
           <button type="button" className="search-inline-cancel" onClick={onCancel}>
             Cancel
           </button>
-        ) : (
-          <button
-            type="button"
-            className={`filter-icon-button ${sortVisible ? "active" : ""}`}
-            onClick={onToggleSort}
-            aria-label={sortVisible ? "Hide sorting options" : "Show sorting options"}
-          >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M4 7H20M7 12H17M10 17H14"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        )}
+        ) : null}
       </div>
     </div>
   );

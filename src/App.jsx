@@ -11,7 +11,40 @@ import CheckoutScreen from "./components/CheckoutScreen";
 import OrderConfirmationScreen from "./components/OrderConfirmationScreen";
 import NavigationStatusScreen from "./components/NavigationStatusScreen";
 import RatingScreen from "./components/RatingScreen";
+import AuthScreen from "./components/AuthScreen";
+import OwnerDashboardScreen from "./components/OwnerDashboardScreen";
+import UserProfileScreen from "./components/UserProfileScreen";
 import { trucks } from "./data/trucks";
+
+const AUTH_ACCOUNTS_STORAGE_KEY = "campus-food-demo-accounts";
+const AUTH_SESSION_STORAGE_KEY = "campus-food-demo-session";
+const PAYMENT_METHOD_STORAGE_KEY = "campus-food-demo-payment-method";
+
+const PAYMENT_METHOD_OPTIONS = [
+  {
+    id: "visa-1234",
+    type: "Visa",
+    badge: "VISA",
+    summary: "•••• 1234",
+    detail: "Personal card"
+  },
+  {
+    id: "mastercard-4242",
+    type: "Mastercard",
+    badge: "MC",
+    summary: "•••• 4242",
+    detail: "Backup card"
+  },
+  {
+    id: "apple-pay",
+    type: "Apple Pay",
+    badge: "PAY",
+    summary: "Apple Pay",
+    detail: "Touch ID ready"
+  }
+];
+
+const TRUCK_OWNER_DEMO_ID = "luchi-pink";
 
 function getCartItemKey(truckId, itemId) {
   return `${truckId}:${itemId}`;
@@ -30,6 +63,69 @@ function createOrderNumber(truckName) {
   const prefix = getTruckInitials(truckName) || "FT";
   const suffix = String(Math.floor(Math.random() * 90 + 10));
   return `${prefix}-${suffix}`;
+}
+
+function getUserInitials(session) {
+  const source =
+    session?.mode === "visitor" ? "Visitor" : session?.name || session?.email || "User";
+
+  return source
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2);
+}
+
+function readStoredAccounts() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(AUTH_ACCOUNTS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredAccounts(accounts) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(AUTH_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+}
+
+function readStoredSession() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSession(session) {
+  if (typeof window === "undefined") return;
+  if (!session) {
+    window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function readStoredPaymentMethod() {
+  if (typeof window === "undefined") return PAYMENT_METHOD_OPTIONS[0].id;
+  try {
+    const stored = window.localStorage.getItem(PAYMENT_METHOD_STORAGE_KEY);
+    const exists = PAYMENT_METHOD_OPTIONS.some((option) => option.id === stored);
+    return exists ? stored : PAYMENT_METHOD_OPTIONS[0].id;
+  } catch {
+    return PAYMENT_METHOD_OPTIONS[0].id;
+  }
+}
+
+function writeStoredPaymentMethod(methodId) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PAYMENT_METHOD_STORAGE_KEY, methodId);
 }
 
 function sortTrucks(data, sortType) {
@@ -63,6 +159,18 @@ const SEARCH_RECENT_DEFAULT = [
   { label: "Ali's Wraps", kind: "query" },
   { label: "Blue Truck", kind: "entity" }
 ];
+
+function getAuthNotice(portal, view) {
+  if (portal === "owner") {
+    return view === "login"
+      ? "Truck owner portal preview. Sign-in UI is ready; dashboard flow can be connected next."
+      : "Contact us to register: 9amdesigner@truck.com";
+  }
+
+  return view === "login"
+    ? "This is a front-end demo. Accounts are stored only in this browser."
+    : "Create any demo credentials you want, then enter the prototype immediately.";
+}
 
 function normalizeText(value) {
   return value.toLowerCase().trim();
@@ -122,8 +230,17 @@ function getTruckSearchScore(truck, query) {
 }
 
 export default function App() {
+  const [authPortal, setAuthPortal] = useState("user");
+  const [authView, setAuthView] = useState("login");
+  const [authState, setAuthState] = useState(() => readStoredSession());
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState(() => getAuthNotice("user", "login"));
   const [sortType, setSortType] = useState("Fastest");
   const [sortVisible, setSortVisible] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState(() =>
+    readStoredPaymentMethod()
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [recentSearches, setRecentSearches] = useState(SEARCH_RECENT_DEFAULT);
@@ -138,6 +255,7 @@ export default function App() {
   const [cartItems, setCartItems] = useState({});
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [truckFeedbackById, setTruckFeedbackById] = useState({});
+  const [truckLiveOverridesById, setTruckLiveOverridesById] = useState({});
   const [pickupName, setPickupName] = useState("");
   const [recenterSignal, setRecenterSignal] = useState(0);
   const [mapStackHeight, setMapStackHeight] = useState(0);
@@ -154,9 +272,10 @@ export default function App() {
     () =>
       trucks.map((truck) => ({
         ...truck,
+        ...(truckLiveOverridesById[truck.id] ?? {}),
         userWaitFeedback: truckFeedbackById[truck.id] ?? null
       })),
-    [truckFeedbackById]
+    [truckFeedbackById, truckLiveOverridesById]
   );
   const sortedTrucks = useMemo(
     () => sortTrucks(trucksWithFeedback, sortType),
@@ -292,6 +411,9 @@ export default function App() {
     () => cartLineItems.reduce((sum, item) => sum + item.priceCad * item.quantity, 0),
     [cartLineItems]
   );
+  const selectedPaymentMethod =
+    PAYMENT_METHOD_OPTIONS.find((option) => option.id === selectedPaymentMethodId) ??
+    PAYMENT_METHOD_OPTIONS[0];
   const checkoutTaxFees = useMemo(() => Number((cartTotal * 0.125).toFixed(2)), [cartTotal]);
   const checkoutTotal = useMemo(
     () => Number((cartTotal + checkoutTaxFees).toFixed(2)),
@@ -375,6 +497,192 @@ export default function App() {
 
   const handleSortSelect = (option) => {
     setSortType(option);
+  };
+
+  const handleAuthViewChange = (nextView) => {
+    setAuthView(nextView);
+    setAuthError("");
+    setAuthNotice(getAuthNotice(authPortal, nextView));
+  };
+
+  const handleAuthPortalChange = (nextPortal) => {
+    setAuthPortal(nextPortal);
+    setAuthView("login");
+    setAuthError("");
+    setAuthNotice(getAuthNotice(nextPortal, "login"));
+  };
+
+  const handleOwnerDemoBypass = () => {
+    const demoTruck = trucks.find((item) => item.id === TRUCK_OWNER_DEMO_ID);
+    const nextSession = {
+      mode: "owner",
+      name: demoTruck?.name ?? "Truck Owner",
+      email: "9amdesigner@truck.com",
+      truckId: TRUCK_OWNER_DEMO_ID
+    };
+
+    setAuthPortal("owner");
+    setAuthView("login");
+    setAuthState(nextSession);
+    writeStoredSession(nextSession);
+    setAuthError("");
+    setAuthNotice("");
+  };
+
+  const handleLogin = async ({ email, password }) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+
+    if (!normalizedEmail || !trimmedPassword) {
+      setAuthError("Please enter both email and password.");
+      setAuthNotice("");
+      return;
+    }
+
+    if (authPortal === "owner") {
+      setAuthError("");
+      setAuthNotice(
+        "Truck owner sign-in page is ready. The owner dashboard flow has not been connected yet."
+      );
+      return;
+    }
+
+    const accounts = readStoredAccounts();
+    const account = accounts.find((item) => item.email === normalizedEmail);
+
+    if (!account) {
+      setAuthError("No demo account matches that email yet. Please register first.");
+      setAuthNotice("");
+      return;
+    }
+
+    if (account.password !== trimmedPassword) {
+      setAuthError("Incorrect password. Please try again.");
+      setAuthNotice("");
+      return;
+    }
+
+    const nextSession = {
+      mode: "member",
+      name: account.name,
+      email: account.email
+    };
+
+    setAuthState(nextSession);
+    writeStoredSession(nextSession);
+    setAuthError("");
+    setAuthNotice("");
+  };
+
+  const handleRegister = async ({ name, email, password, confirmPassword }) => {
+    if (authPortal === "owner") {
+      setAuthError("");
+      setAuthNotice(getAuthNotice("owner", "register"));
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    const trimmedName = name.trim();
+
+    if (!normalizedEmail || !trimmedPassword) {
+      setAuthError("Email and password are required.");
+      setAuthNotice("");
+      return;
+    }
+
+    if (trimmedPassword.length < 4) {
+      setAuthError("Please use a password with at least 4 characters for the demo.");
+      setAuthNotice("");
+      return;
+    }
+
+    if (trimmedPassword !== confirmPassword.trim()) {
+      setAuthError("Passwords do not match.");
+      setAuthNotice("");
+      return;
+    }
+
+    const accounts = readStoredAccounts();
+    const existingAccount = accounts.find((item) => item.email === normalizedEmail);
+
+    if (existingAccount) {
+      setAuthError("That email is already registered. Please log in instead.");
+      setAuthNotice("");
+      return;
+    }
+
+    const nextAccount = {
+      name: trimmedName || normalizedEmail.split("@")[0],
+      email: normalizedEmail,
+      password: trimmedPassword
+    };
+    const nextAccounts = [...accounts, nextAccount];
+    const nextSession = {
+      mode: "member",
+      name: nextAccount.name,
+      email: nextAccount.email
+    };
+
+    writeStoredAccounts(nextAccounts);
+    writeStoredSession(nextSession);
+    setAuthState(nextSession);
+    setAuthError("");
+    setAuthNotice("");
+  };
+
+  const handleVisitorSignIn = () => {
+    const nextSession = {
+      mode: "visitor",
+      name: "Visitor",
+      email: ""
+    };
+    setAuthState(nextSession);
+    writeStoredSession(nextSession);
+    setAuthError("");
+    setAuthNotice("");
+  };
+
+  const handleSignOut = () => {
+    const nextPortal = authState?.mode === "owner" ? "owner" : authPortal;
+    setAuthState(null);
+    writeStoredSession(null);
+    setProfileOpen(false);
+    setAuthPortal(nextPortal);
+    setAuthView("login");
+    setAuthError("");
+    setAuthNotice(
+      nextPortal === "owner"
+        ? "Signed out. Use demo bypass or sign in again to reopen the truck owner dashboard."
+        : "Signed out. You can log in again or continue as a visitor."
+    );
+    setSearchQuery("");
+    setSearchFocused(false);
+    setFocusedTruckId(null);
+    setActiveTruckId(null);
+    setCartOpen(false);
+    setCheckoutOpen(false);
+    setConfirmationOpen(false);
+    setNavigationStatusOpen(false);
+    setRatingOpen(false);
+    setCartItems({});
+    setConfirmedOrder(null);
+    setPickupName("");
+  };
+
+  const handleTruckLiveUpdate = (truckId, updates) => {
+    setTruckLiveOverridesById((prev) => ({
+      ...prev,
+      [truckId]: {
+        ...(prev[truckId] ?? {}),
+        ...updates
+      }
+    }));
+  };
+
+  const handlePaymentMethodChange = (methodId) => {
+    setSelectedPaymentMethodId(methodId);
+    writeStoredPaymentMethod(methodId);
   };
 
   const applySearch = (value) => {
@@ -549,6 +857,59 @@ export default function App() {
   const sheetCollapsed = sheetHeight <= sheetSnapPoints.hidden + 8;
   const hideRecenter = sheetHeight >= sheetSnapPoints.expanded - 6;
 
+  if (!authState) {
+    return (
+      <MobileShell>
+        <AuthScreen
+          portal={authPortal}
+          mode={authView}
+          error={authError}
+          notice={authNotice}
+          onPortalChange={handleAuthPortalChange}
+          onModeChange={handleAuthViewChange}
+          onLogin={handleLogin}
+          onOwnerDemoBypass={handleOwnerDemoBypass}
+          onRegister={handleRegister}
+          onVisitor={handleVisitorSignIn}
+        />
+      </MobileShell>
+    );
+  }
+
+  if (authState?.mode === "owner") {
+    const ownerTruck =
+      trucksWithFeedback.find((truck) => truck.id === authState.truckId) ??
+      trucksWithFeedback.find((truck) => truck.id === TRUCK_OWNER_DEMO_ID) ??
+      null;
+
+    return (
+      <MobileShell>
+        <OwnerDashboardScreen
+          truck={ownerTruck}
+          ownerName={authState.name}
+          onTruckLiveUpdate={handleTruckLiveUpdate}
+          onSignOut={handleSignOut}
+        />
+      </MobileShell>
+    );
+  }
+
+  if (profileOpen) {
+    return (
+      <MobileShell>
+        <UserProfileScreen
+          authState={authState}
+          avatarLabel={getUserInitials(authState)}
+          paymentMethods={PAYMENT_METHOD_OPTIONS}
+          selectedPaymentMethodId={selectedPaymentMethod.id}
+          onBack={() => setProfileOpen(false)}
+          onSelectPaymentMethod={handlePaymentMethodChange}
+          onSignOut={handleSignOut}
+        />
+      </MobileShell>
+    );
+  }
+
   if (activeTruck) {
     if (ratingOpen) {
       return (
@@ -604,6 +965,7 @@ export default function App() {
             subtotal={cartTotal}
             taxFees={checkoutTaxFees}
             total={checkoutTotal}
+            paymentMethod={selectedPaymentMethod}
             pickupName={pickupName}
             onPickupNameChange={setPickupName}
             onBack={() => setCheckoutOpen(false)}
@@ -641,20 +1003,25 @@ export default function App() {
     <MobileShell>
       <main className="browse-screen">
         <header className="top-area">
-          <SearchBar
-            value={searchQuery}
-            focused={searchFocused}
-            onFocus={() => setSearchFocused(true)}
-            onChange={applySearch}
-            onSubmit={handleSearchSubmit}
-            onClear={() => setSearchQuery("")}
-            onCancel={handleSearchCancel}
-            sortVisible={sortVisible}
-            onToggleSort={() => {
-              if (searchFocused) return;
-              setSortVisible((prev) => !prev);
-            }}
-          />
+          <div className={`top-search-row ${searchFocused ? "search-focused" : ""}`}>
+            <SearchBar
+              value={searchQuery}
+              focused={searchFocused}
+              onFocus={() => setSearchFocused(true)}
+              onChange={applySearch}
+              onSubmit={handleSearchSubmit}
+              onClear={() => setSearchQuery("")}
+              onCancel={handleSearchCancel}
+            />
+            <button
+              type="button"
+              className="profile-entry-button"
+              onClick={() => setProfileOpen(true)}
+              aria-label="Open user profile"
+            >
+              <span className="profile-entry-avatar">{getUserInitials(authState)}</span>
+            </button>
+          </div>
         </header>
 
         <section className={`map-stack ${isSearchMode ? "search-mode" : ""}`} ref={mapStackRef}>

@@ -13,14 +13,6 @@ function ChevronRightIcon() {
   );
 }
 
-function CardIcon() {
-  return (
-    <span className="checkout-card-badge" aria-hidden="true">
-      VISA
-    </span>
-  );
-}
-
 function formatPickupTime(waitTimeMin) {
   const pickup = new Date();
   pickup.setMinutes(pickup.getMinutes() + waitTimeMin);
@@ -40,6 +32,7 @@ export default function CheckoutScreen({
   subtotal,
   taxFees,
   total,
+  paymentMethod,
   pickupName,
   onPickupNameChange,
   onBack,
@@ -113,14 +106,14 @@ export default function CheckoutScreen({
         <section className="checkout-card checkout-info-card">
           <div className="checkout-info-header">
             <span className="checkout-field-label">Payment Details</span>
-            <button type="button" className="checkout-link-button">
-              Change
-            </button>
+            <span className="checkout-link-button">Profile</span>
           </div>
           <div className="checkout-info-row">
             <div className="checkout-payment-copy">
-              <CardIcon />
-              <span>•••• 1234</span>
+              <span className="checkout-card-badge" aria-hidden="true">
+                {paymentMethod?.badge ?? "CARD"}
+              </span>
+              <span>{paymentMethod?.summary ?? "•••• 1234"}</span>
             </div>
             <ChevronRightIcon />
           </div>

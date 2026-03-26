@@ -36,14 +36,14 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   if (!order) return null;
 
   const DEFAULT_ZOOM = 2.1;
-  const CENTER_ANCHOR_X = 0.42;
-  const CENTER_ANCHOR_Y = 0.24;
+  const CENTER_ANCHOR_X = 0.5;
+  const CENTER_ANCHOR_Y = 0.5;
   const MAP_INSET_RATIO = 0.08;
   const PAN_OVERSCAN_X = 0;
   const PAN_OVERSCAN_Y = 0;
   const userLocation = { x: 62, y: 62 };
   const mapCanvasRef = useRef(null);
-  const hasCenteredMapRef = useRef(false);
+  const recenterTimerRef = useRef(null);
   const pointersRef = useRef({});
   const pinchStateRef = useRef({
     active: false,
@@ -71,6 +71,7 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
   const [nowMs, setNowMs] = useState(Date.now());
   const [mapDragging, setMapDragging] = useState(false);
+  const [isRecentering, setIsRecentering] = useState(false);
   const [sheetOffset, setSheetOffset] = useState(0);
   const [sheetDragging, setSheetDragging] = useState(false);
 
@@ -122,9 +123,38 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
     [MAP_INSET_RATIO, mapZoom]
   );
 
+  const centerOnPoint = (xPercent, yPercent, zoomValue = mapZoom) => {
+    if (!mapCanvasRef.current) return;
+    const rect = mapCanvasRef.current.getBoundingClientRect();
+    const contentWidth = rect.width * (1 + MAP_INSET_RATIO * 2);
+    const contentHeight = rect.height * (1 + MAP_INSET_RATIO * 2);
+    const contentLeft = -MAP_INSET_RATIO * rect.width;
+    const contentTop = -MAP_INSET_RATIO * rect.height;
+    const baseX = contentLeft + (xPercent / 100) * contentWidth;
+    const baseY = contentTop + (yPercent / 100) * contentHeight;
+    const targetX = rect.width * CENTER_ANCHOR_X - zoomValue * baseX;
+    const targetY = rect.height * CENTER_ANCHOR_Y - zoomValue * baseY;
+    setMapOffset(clampOffset(targetX, targetY, zoomValue));
+  };
+
+  const centerOnUser = (zoomValue = mapZoom) => {
+    centerOnPoint(userLocation.x, userLocation.y, zoomValue);
+  };
+
+  const handleRecenter = () => {
+    setIsRecentering(true);
+    setMapZoom(DEFAULT_ZOOM);
+    centerOnUser(DEFAULT_ZOOM);
+    if (recenterTimerRef.current) clearTimeout(recenterTimerRef.current);
+    recenterTimerRef.current = setTimeout(() => {
+      setIsRecentering(false);
+    }, 540);
+  };
+
   const handleMapPointerDown = (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    setIsRecentering(false);
     pointersRef.current[event.pointerId] = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture?.(event.pointerId);
 
@@ -291,6 +321,7 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
 
   const handleWheelZoom = (event) => {
     event.preventDefault();
+    setIsRecentering(false);
     if (!mapCanvasRef.current) return;
     const rect = mapCanvasRef.current.getBoundingClientRect();
     const focalX = event.clientX - rect.left;
@@ -300,20 +331,14 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   };
 
   useEffect(() => {
-    if (hasCenteredMapRef.current) return;
-    if (!mapCanvasRef.current) return;
-    const rect = mapCanvasRef.current.getBoundingClientRect();
-    const contentWidth = rect.width * (1 + MAP_INSET_RATIO * 2);
-    const contentHeight = rect.height * (1 + MAP_INSET_RATIO * 2);
-    const contentLeft = -MAP_INSET_RATIO * rect.width;
-    const contentTop = -MAP_INSET_RATIO * rect.height;
-    const baseX = contentLeft + (userLocation.x / 100) * contentWidth;
-    const baseY = contentTop + (userLocation.y / 100) * contentHeight;
-    const targetX = rect.width * CENTER_ANCHOR_X - DEFAULT_ZOOM * baseX;
-    const targetY = rect.height * CENTER_ANCHOR_Y - DEFAULT_ZOOM * baseY;
-    setMapOffset(clampOffset(targetX, targetY, DEFAULT_ZOOM));
-    hasCenteredMapRef.current = true;
-  }, [clampOffset, mapZoom]);
+    const raf = requestAnimationFrame(() => {
+      handleRecenter();
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      if (recenterTimerRef.current) clearTimeout(recenterTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -374,6 +399,7 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   };
 
   const sheetHidden = sheetOffset >= Math.max(0, sheetHiddenOffset - 4);
+  const visibleSheetHeight = Math.max(0, sheetHiddenOffset - sheetOffset - SHEET_HIDDEN_EXTRA);
 
   return (
     <main className="nav-status-screen">
@@ -413,7 +439,7 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
           onWheel={handleWheelZoom}
         >
           <div
-            className="nav-status-map-content"
+            className={`nav-status-map-content ${isRecentering ? "recentering" : ""}`}
             style={{
               transform: `translate(${mapOffset.x}px, ${mapOffset.y}px) scale(${mapZoom})`
             }}
@@ -448,6 +474,20 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
 
           </div>
         </div>
+        <button
+          type="button"
+          className="map-recenter-fab nav-map-recenter-fab"
+          style={{ bottom: `${visibleSheetHeight + 14}px` }}
+          onClick={handleRecenter}
+          aria-label="Center map on your location"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M19 4L5.5 10.2C4.7 10.6 4.8 11.8 5.7 12L11.3 13.5L12.8 19.1C13 20 14.2 20.1 14.6 19.3L20.8 5.8C21.2 5 20.5 3.6 19 4Z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
         <section
           ref={sheetRef}
           className={`nav-status-bottom-card nav-style-sheet ${
