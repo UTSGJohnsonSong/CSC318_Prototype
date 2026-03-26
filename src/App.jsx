@@ -10,6 +10,7 @@ import TruckDetailScreen from "./components/TruckDetailScreen";
 import CheckoutScreen from "./components/CheckoutScreen";
 import OrderConfirmationScreen from "./components/OrderConfirmationScreen";
 import NavigationStatusScreen from "./components/NavigationStatusScreen";
+import RatingScreen from "./components/RatingScreen";
 import { trucks } from "./data/trucks";
 
 function getCartItemKey(truckId, itemId) {
@@ -133,8 +134,10 @@ export default function App() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [navigationStatusOpen, setNavigationStatusOpen] = useState(false);
+  const [ratingOpen, setRatingOpen] = useState(false);
   const [cartItems, setCartItems] = useState({});
   const [confirmedOrder, setConfirmedOrder] = useState(null);
+  const [truckFeedbackById, setTruckFeedbackById] = useState({});
   const [pickupName, setPickupName] = useState("");
   const [recenterSignal, setRecenterSignal] = useState(0);
   const [mapStackHeight, setMapStackHeight] = useState(0);
@@ -147,7 +150,18 @@ export default function App() {
     startHeight: 0
   });
 
-  const sortedTrucks = useMemo(() => sortTrucks(trucks, sortType), [sortType]);
+  const trucksWithFeedback = useMemo(
+    () =>
+      trucks.map((truck) => ({
+        ...truck,
+        userWaitFeedback: truckFeedbackById[truck.id] ?? null
+      })),
+    [truckFeedbackById]
+  );
+  const sortedTrucks = useMemo(
+    () => sortTrucks(trucksWithFeedback, sortType),
+    [sortType, trucksWithFeedback]
+  );
   const isSearchMode = searchFocused;
   const queryActive = searchQuery.trim().length > 0;
   const searchRankedTrucks = useMemo(() => {
@@ -246,10 +260,10 @@ export default function App() {
     );
   }, []);
 
-  const activeTruck = sortedTrucks.find((truck) => truck.id === activeTruckId) ?? null;
+  const activeTruck = trucksWithFeedback.find((truck) => truck.id === activeTruckId) ?? null;
   const allMenuItems = useMemo(
     () =>
-      trucks.flatMap((truck) =>
+      trucksWithFeedback.flatMap((truck) =>
         (truck.menu ?? []).map((item) => ({
           ...item,
           itemId: item.id,
@@ -258,7 +272,7 @@ export default function App() {
           key: getCartItemKey(truck.id, item.id)
         }))
       ),
-    []
+    [trucksWithFeedback]
   );
   const cartLineItems = useMemo(
     () =>
@@ -410,6 +424,7 @@ export default function App() {
     setCheckoutOpen(false);
     setConfirmationOpen(false);
     setNavigationStatusOpen(false);
+    setRatingOpen(false);
   };
 
   const getItemQuantity = (truckId, itemId) => cartItems[getCartItemKey(truckId, itemId)] ?? 0;
@@ -466,7 +481,61 @@ export default function App() {
     setCartOpen(false);
     setCheckoutOpen(false);
     setNavigationStatusOpen(false);
+    setRatingOpen(false);
     setConfirmationOpen(true);
+  };
+
+  const handleCollectedOrder = () => {
+    setConfirmedOrder((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        collectedAtMs: Date.now()
+      };
+    });
+    setNavigationStatusOpen(false);
+    setRatingOpen(true);
+  };
+
+  const handleUploadWaitFeedback = ({ truckId, deltaMin, actualPickupAtMs }) => {
+    const nextFeedback = {
+      deltaMin,
+      actualPickupAtMs,
+      submittedAtMs: Date.now()
+    };
+
+    setTruckFeedbackById((prev) => ({
+      ...prev,
+      [truckId]: nextFeedback
+    }));
+
+    setConfirmedOrder((prev) => {
+      if (!prev || prev.truck.id !== truckId) return prev;
+      return {
+        ...prev,
+        waitTimeFeedback: nextFeedback
+      };
+    });
+  };
+
+  const handleSubmitRating = ({ rating, comment }) => {
+    setConfirmedOrder((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        feedback: {
+          rating,
+          comment,
+          waitTimeFeedback: prev.waitTimeFeedback ?? null,
+          submittedAtMs: Date.now()
+        }
+      };
+    });
+    setRatingOpen(false);
+    setConfirmationOpen(false);
+    setNavigationStatusOpen(false);
+    setActiveTruckId(null);
+    setFocusedTruckId(null);
   };
 
   const handleSheetPointerDown = (event) => {
@@ -481,6 +550,22 @@ export default function App() {
   const hideRecenter = sheetHeight >= sheetSnapPoints.expanded - 6;
 
   if (activeTruck) {
+    if (ratingOpen) {
+      return (
+        <MobileShell>
+          <RatingScreen
+            order={confirmedOrder}
+            onBack={() => {
+              setRatingOpen(false);
+              setNavigationStatusOpen(true);
+            }}
+            onUploadWaitFeedback={handleUploadWaitFeedback}
+            onSubmit={handleSubmitRating}
+          />
+        </MobileShell>
+      );
+    }
+
     if (navigationStatusOpen) {
       return (
         <MobileShell>
@@ -490,6 +575,7 @@ export default function App() {
               setNavigationStatusOpen(false);
               setConfirmationOpen(true);
             }}
+            onCollected={handleCollectedOrder}
           />
         </MobileShell>
       );

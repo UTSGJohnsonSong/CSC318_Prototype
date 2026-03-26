@@ -31,6 +31,8 @@ export const trucks = [
     imageSrc: littlePinkHeroImage,
     searchFoods: ["curry chicken rice", "beef brisket rice", "rice bowl", "lunch combo"],
     intentTags: ["quick", "cheap lunch", "open now", "comfort food"],
+    location: "King's College Cir, University of Toronto",
+    navigationAddress: "King's College Circle, Toronto, ON M5S 3K1",
     menu: [
       {
         id: "japanese-curry-chicken-rice",
@@ -67,6 +69,8 @@ export const trucks = [
     imageSrc: jianbingHeroImage,
     searchFoods: ["jianbing", "crepe", "bubble tea", "soy milk"],
     intentTags: ["vegetarian", "quick", "cheap", "snack"],
+    location: "Harbord St & St George St, University of Toronto",
+    navigationAddress: "Harbord St & St George St, Toronto, ON",
     mapX: 40,
     mapY: 40
   },
@@ -85,6 +89,8 @@ export const trucks = [
     imageSrc: redGrillHeroImage,
     searchFoods: ["fried chicken", "hot dog", "grill platter"],
     intentTags: ["halal", "protein", "late lunch"],
+    location: "Sidney Smith Hall, University of Toronto",
+    navigationAddress: "100 St George St, Toronto, ON M5S 3G3",
     mapX: 59,
     mapY: 69
   },
@@ -103,6 +109,8 @@ export const trucks = [
     imageSrc: flameHeroImage,
     searchFoods: ["shawarma", "kebab", "falafel wrap"],
     intentTags: ["halal", "quick", "open now"],
+    location: "Hart House Circle, University of Toronto",
+    navigationAddress: "7 Hart House Cir, Toronto, ON M5S 3H3",
     mapX: 46,
     mapY: 50
   },
@@ -121,6 +129,8 @@ export const trucks = [
     imageSrc: whiteChineseHeroImage,
     searchFoods: ["dumplings", "noodles", "rice plate"],
     intentTags: ["cheap lunch", "family portions", "open now"],
+    location: "Galbraith Rd, University of Toronto",
+    navigationAddress: "Galbraith Rd, Toronto, ON M5S 1A1",
     mapX: 57,
     mapY: 66
   },
@@ -139,6 +149,8 @@ export const trucks = [
     imageSrc: blueTruckHeroImage,
     searchFoods: ["burger", "fries", "fried chicken sandwich"],
     intentTags: ["quick", "cheap", "grab and go"],
+    location: "Front Campus, University of Toronto",
+    navigationAddress: "93 St George St, Toronto, ON M5S 2E5",
     mapX: 52,
     mapY: 58
   }

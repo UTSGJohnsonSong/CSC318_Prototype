@@ -1,6 +1,13 @@
 import QuantityControl from "./QuantityControl";
 import CartScreen from "./CartScreen";
 
+function formatUserWaitFeedback(feedback) {
+  if (!feedback) return "";
+  if (feedback.deltaMin === 0) return "On time";
+  if (feedback.deltaMin < 0) return `${Math.abs(feedback.deltaMin)} min faster`;
+  return `${feedback.deltaMin} min slower`;
+}
+
 function getStatusTone(status) {
   if (status === "open") return "badge-fast";
   if (status === "moderate") return "badge-moderate";
@@ -75,6 +82,11 @@ export default function TruckDetailScreen({
             <span className="details-stat-label">Est. wait</span>
             <strong className="details-stat-value">{truck.waitTimeMin} min</strong>
             <span className="details-stat-note">{truck.trustNote}</span>
+            {truck.userWaitFeedback ? (
+              <span className="details-stat-feedback">
+                User Feedback Time: {formatUserWaitFeedback(truck.userWaitFeedback)}
+              </span>
+            ) : null}
           </article>
 
           <article className="details-card details-stat-card">

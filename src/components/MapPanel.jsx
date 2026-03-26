@@ -6,6 +6,17 @@ function getPinTone(waitTimeMin) {
   return "tone-red";
 }
 
+function getDistance(first, second) {
+  return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
+function getMidpoint(first, second) {
+  return {
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2
+  };
+}
+
 export default function MapPanel({
   trucks,
   selectedTruckId,
@@ -18,11 +29,20 @@ export default function MapPanel({
   const CENTER_ANCHOR_X = 0.42;
   const CENTER_ANCHOR_Y = 0.24;
   const mapInsetRatio = 0.08;
-  const PAN_OVERSCAN_X = 0.7;
-  const PAN_OVERSCAN_Y = 0.9;
+  const PAN_OVERSCAN_X = 0;
+  const PAN_OVERSCAN_Y = 0;
   const mapRef = useRef(null);
+  const pointersRef = useRef({});
+  const pinchStateRef = useRef({
+    active: false,
+    startDistance: 0,
+    startZoom: DEFAULT_ZOOM,
+    startOffset: { x: 0, y: 0 },
+    startMidpoint: { x: 0, y: 0 }
+  });
   const dragStateRef = useRef({
     dragging: false,
+    pointerId: null,
     startX: 0,
     startY: 0,
     baseX: 0,
@@ -38,22 +58,21 @@ export default function MapPanel({
   const clampZoom = (value) => Math.max(1.15, Math.min(3.2, value));
 
   const clampOffset = useMemo(
-    () => (nextX, nextY) => {
+    () => (nextX, nextY, zoomValue = zoom) => {
       if (!mapRef.current) return { x: nextX, y: nextY };
       const rect = mapRef.current.getBoundingClientRect();
       const contentWidth = rect.width * (1 + mapInsetRatio * 2);
       const contentHeight = rect.height * (1 + mapInsetRatio * 2);
       const contentLeft = -mapInsetRatio * rect.width;
       const contentTop = -mapInsetRatio * rect.height;
-      const extraX = (rect.width * PAN_OVERSCAN_X) / zoom;
-      const extraY = (rect.height * PAN_OVERSCAN_Y) / zoom;
+      const extraX = (rect.width * PAN_OVERSCAN_X) / zoomValue;
+      const extraY = (rect.height * PAN_OVERSCAN_Y) / zoomValue;
 
-      // transform order is translate(...) scale(...), so solve clamp bounds in pre-scale coords.
-      // Keep viewport always covered by content while allowing panning across full map extent.
-      const minX = rect.width / zoom - contentLeft - contentWidth - extraX;
-      const maxX = -contentLeft + extraX;
-      const minY = rect.height / zoom - contentTop - contentHeight - extraY;
-      const maxY = -contentTop + extraY;
+      // CSS applies scale before translate here, so offset bounds must be solved in screen space.
+      const minX = rect.width - (contentLeft + contentWidth) * zoomValue - extraX;
+      const maxX = -contentLeft * zoomValue + extraX;
+      const minY = rect.height - (contentTop + contentHeight) * zoomValue - extraY;
+      const maxY = -contentTop * zoomValue + extraY;
 
       return {
         x: Math.max(minX, Math.min(maxX, nextX)),
@@ -65,7 +84,43 @@ export default function MapPanel({
 
   useEffect(() => {
     function onMove(event) {
+      if (pointersRef.current[event.pointerId]) {
+        pointersRef.current[event.pointerId] = { x: event.clientX, y: event.clientY };
+      }
+
+      const pointers = Object.values(pointersRef.current);
+      if (pinchStateRef.current.active && pointers.length >= 2) {
+        if (!mapRef.current) return;
+        const rect = mapRef.current.getBoundingClientRect();
+        const [first, second] = pointers;
+        const midpoint = getMidpoint(first, second);
+        const nextDistance = getDistance(first, second);
+        const nextZoom = clampZoom(
+          pinchStateRef.current.startZoom * (nextDistance / pinchStateRef.current.startDistance)
+        );
+        const zoomRatio = nextZoom / pinchStateRef.current.startZoom;
+        const currentMidpoint = {
+          x: midpoint.x - rect.left,
+          y: midpoint.y - rect.top
+        };
+        const nextOffset = clampOffset(
+          currentMidpoint.x -
+            zoomRatio *
+              (pinchStateRef.current.startMidpoint.x - pinchStateRef.current.startOffset.x),
+          currentMidpoint.y -
+            zoomRatio *
+              (pinchStateRef.current.startMidpoint.y - pinchStateRef.current.startOffset.y),
+          nextZoom
+        );
+        setZoom(nextZoom);
+        setOffset(nextOffset);
+        return;
+      }
+
       if (!dragStateRef.current.dragging) return;
+      if (dragStateRef.current.pointerId !== null && event.pointerId !== dragStateRef.current.pointerId) {
+        return;
+      }
       const deltaX = event.clientX - dragStateRef.current.startX;
       const deltaY = event.clientY - dragStateRef.current.startY;
       const next = clampOffset(
@@ -75,17 +130,62 @@ export default function MapPanel({
       setOffset(next);
     }
 
-    function onUp() {
+    function onUp(event) {
+      delete pointersRef.current[event.pointerId];
+
+      if (
+        mapRef.current &&
+        event.pointerId !== undefined &&
+        mapRef.current.hasPointerCapture?.(event.pointerId)
+      ) {
+        mapRef.current.releasePointerCapture(event.pointerId);
+      }
+
+      if (pinchStateRef.current.active) {
+        const remainingPointers = Object.entries(pointersRef.current);
+        if (remainingPointers.length >= 2) {
+          const [first, second] = remainingPointers.map(([, point]) => point);
+          if (!mapRef.current) return;
+          const rect = mapRef.current.getBoundingClientRect();
+          pinchStateRef.current = {
+            active: true,
+            startDistance: getDistance(first, second),
+            startZoom: zoom,
+            startOffset: offset,
+            startMidpoint: {
+              x: getMidpoint(first, second).x - rect.left,
+              y: getMidpoint(first, second).y - rect.top
+            }
+          };
+          return;
+        }
+
+        pinchStateRef.current.active = false;
+        if (remainingPointers.length === 1) {
+          const [[pointerId, point]] = remainingPointers;
+          dragStateRef.current.dragging = true;
+          dragStateRef.current.pointerId = Number(pointerId);
+          dragStateRef.current.startX = point.x;
+          dragStateRef.current.startY = point.y;
+          dragStateRef.current.baseX = offset.x;
+          dragStateRef.current.baseY = offset.y;
+          return;
+        }
+      }
+
       dragStateRef.current.dragging = false;
+      dragStateRef.current.pointerId = null;
     }
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
-  }, [clampOffset]);
+  }, [clampOffset, offset, zoom]);
 
   useEffect(() => {
     setOffset((prev) => clampOffset(prev.x, prev.y));
@@ -94,8 +194,34 @@ export default function MapPanel({
   const handlePointerDown = (event) => {
     if (event.target.closest(".map-pin")) return;
     if (event.target.closest(".map-zoom-controls")) return;
+    event.preventDefault();
     setIsRecentering(false);
+    pointersRef.current[event.pointerId] = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    const pointers = Object.values(pointersRef.current);
+    if (pointers.length >= 2) {
+      if (!mapRef.current) return;
+      const rect = mapRef.current.getBoundingClientRect();
+      const [first, second] = pointers;
+      const midpoint = getMidpoint(first, second);
+      pinchStateRef.current = {
+        active: true,
+        startDistance: Math.max(getDistance(first, second), 1),
+        startZoom: zoom,
+        startOffset: offset,
+        startMidpoint: {
+          x: midpoint.x - rect.left,
+          y: midpoint.y - rect.top
+        }
+      };
+      dragStateRef.current.dragging = false;
+      dragStateRef.current.pointerId = null;
+      return;
+    }
+
     dragStateRef.current.dragging = true;
+    dragStateRef.current.pointerId = event.pointerId;
     dragStateRef.current.startX = event.clientX;
     dragStateRef.current.startY = event.clientY;
     dragStateRef.current.baseX = offset.x;
@@ -105,8 +231,24 @@ export default function MapPanel({
   const handleWheelZoom = (event) => {
     event.preventDefault();
     setIsRecentering(false);
+    if (!mapRef.current) return;
+    const rect = mapRef.current.getBoundingClientRect();
+    const focalX = event.clientX - rect.left;
+    const focalY = event.clientY - rect.top;
     const direction = event.deltaY > 0 ? -1 : 1;
-    setZoom((prev) => clampZoom(prev + direction * 0.08));
+
+    setZoom((prev) => {
+      const nextZoom = clampZoom(prev + direction * 0.08);
+      const zoomRatio = nextZoom / prev;
+      setOffset((prevOffset) =>
+        clampOffset(
+          focalX - zoomRatio * (focalX - prevOffset.x),
+          focalY - zoomRatio * (focalY - prevOffset.y),
+          nextZoom
+        )
+      );
+      return nextZoom;
+    });
   };
 
   const centerOnPoint = (xPercent, yPercent, zoomValue = zoom) => {
@@ -120,7 +262,7 @@ export default function MapPanel({
     const baseY = contentTop + (yPercent / 100) * contentHeight;
     const targetX = rect.width * CENTER_ANCHOR_X - zoomValue * baseX;
     const targetY = rect.height * CENTER_ANCHOR_Y - zoomValue * baseY;
-    const next = clampOffset(targetX, targetY);
+    const next = clampOffset(targetX, targetY, zoomValue);
     setOffset(next);
   };
 
@@ -180,7 +322,7 @@ export default function MapPanel({
           <div
             className="user-location"
             style={{ left: `${userLocation.x}%`, top: `${userLocation.y}%` }}
-            aria-label="Your current location"
+            aria-label="Myhal Centre for Engineering Innovation and Entrepreneurship"
           >
             <span className="user-halo" />
             <span className="user-dot" />
@@ -212,7 +354,22 @@ export default function MapPanel({
             className="map-zoom-button"
             onClick={() => {
               setIsRecentering(false);
-              setZoom((prev) => clampZoom(prev + 0.12));
+              if (!mapRef.current) return;
+              const rect = mapRef.current.getBoundingClientRect();
+              const focalX = rect.width / 2;
+              const focalY = rect.height / 2;
+              setZoom((prev) => {
+                const nextZoom = clampZoom(prev + 0.12);
+                const zoomRatio = nextZoom / prev;
+                setOffset((prevOffset) =>
+                  clampOffset(
+                    focalX - zoomRatio * (focalX - prevOffset.x),
+                    focalY - zoomRatio * (focalY - prevOffset.y),
+                    nextZoom
+                  )
+                );
+                return nextZoom;
+              });
             }}
             aria-label="Zoom in map"
           >
@@ -223,7 +380,22 @@ export default function MapPanel({
             className="map-zoom-button"
             onClick={() => {
               setIsRecentering(false);
-              setZoom((prev) => clampZoom(prev - 0.12));
+              if (!mapRef.current) return;
+              const rect = mapRef.current.getBoundingClientRect();
+              const focalX = rect.width / 2;
+              const focalY = rect.height / 2;
+              setZoom((prev) => {
+                const nextZoom = clampZoom(prev - 0.12);
+                const zoomRatio = nextZoom / prev;
+                setOffset((prevOffset) =>
+                  clampOffset(
+                    focalX - zoomRatio * (focalX - prevOffset.x),
+                    focalY - zoomRatio * (focalY - prevOffset.y),
+                    nextZoom
+                  )
+                );
+                return nextZoom;
+              });
             }}
             aria-label="Zoom out map"
           >
