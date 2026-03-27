@@ -9,6 +9,17 @@ function formatCurrency(total) {
   return `C$${Number(total ?? 0).toFixed(2)}`;
 }
 
+function parseCadFromLabel(label) {
+  const m = String(label ?? "").match(/[\d.]+/);
+  return m ? Number.parseFloat(m[0]) : 0;
+}
+
+function parseSummaryLine(summary) {
+  const m = String(summary ?? "").match(/^(.*?)\s*x(\d+)$/i);
+  if (m) return { name: m[1].trim(), qty: Number(m[2]) };
+  return { name: String(summary ?? "Item").trim(), qty: 1 };
+}
+
 function createOwnerDemoOrders(truck) {
   const firstItem = truck?.menu?.[0];
   const secondItem = truck?.menu?.[1] ?? firstItem;
@@ -177,6 +188,7 @@ export default function OwnerDashboardScreen({
   const [selectedOrderId, setSelectedOrderId] = useState("0424");
   const [nowMs, setNowMs] = useState(Date.now());
   const [confirmingOrderId, setConfirmingOrderId] = useState("");
+  const [receiptOrderId, setReceiptOrderId] = useState("");
   const [activityMessage, setActivityMessage] = useState(
     "Demo dashboard loaded for UT Little Pink Truck. Choose an order when the meal is ready."
   );
@@ -319,6 +331,60 @@ export default function OwnerDashboardScreen({
     setConfirmingOrderId("");
   };
 
+  const receiptOrder = useMemo(
+    () => (receiptOrderId ? orders.find((o) => o.id === receiptOrderId) ?? null : null),
+    [orders, receiptOrderId]
+  );
+
+  const receiptDetail = useMemo(() => {
+    if (!receiptOrder || !truck) return null;
+
+    const isLinkedLive =
+      receiptOrder.source === "live" &&
+      activeOrder?.orderNumber &&
+      receiptOrder.linkedOrderNumber === activeOrder.orderNumber;
+
+    if (isLinkedLive && activeOrder.items?.length) {
+      const subtotal = activeOrder.subtotal ?? 0;
+      const tax = activeOrder.taxFees ?? 0;
+      const total = activeOrder.total ?? subtotal + tax;
+      return {
+        orderLabel: activeOrder.orderNumber,
+        customerName: activeOrder.pickupName?.trim() || receiptOrder.customerName,
+        school: receiptOrder.school,
+        lines: activeOrder.items.map((item) => ({
+          name: item.name,
+          qty: item.quantity,
+          unit: item.priceCad,
+          line: Number((item.priceCad * item.quantity).toFixed(2))
+        })),
+        subtotal,
+        tax,
+        total,
+        truckName: activeOrder.truck?.name ?? truck.name,
+        isDemo: false
+      };
+    }
+
+    const total = parseCadFromLabel(receiptOrder.totalLabel);
+    const subtotal = Number((total / 1.125).toFixed(2));
+    const tax = Number((total - subtotal).toFixed(2));
+    const { name, qty } = parseSummaryLine(receiptOrder.summary);
+    const unit = qty > 0 ? Number((subtotal / qty).toFixed(2)) : subtotal;
+
+    return {
+      orderLabel: String(receiptOrder.id),
+      customerName: receiptOrder.customerName,
+      school: receiptOrder.school,
+      lines: [{ name, qty, unit, line: subtotal }],
+      subtotal,
+      tax,
+      total,
+      truckName: truck.name,
+      isDemo: true
+    };
+  }, [activeOrder, receiptOrder, truck]);
+
   if (!truck) return null;
 
   return (
@@ -458,7 +524,11 @@ export default function OwnerDashboardScreen({
                       {isPickup ? "Mark picked up" : "Notify ready"}
                     </button>
                   ) : null}
-                  <button type="button" className="owner-order-secondary">
+                  <button
+                    type="button"
+                    className="owner-order-secondary"
+                    onClick={() => setReceiptOrderId(order.id)}
+                  >
                     <ReceiptIcon />
                     <span>View receipt</span>
                   </button>
@@ -509,6 +579,73 @@ export default function OwnerDashboardScreen({
                 Confirm
               </button>
             </div>
+          </section>
+        </>
+      ) : null}
+
+      {receiptOrderId && receiptDetail ? (
+        <>
+          <button
+            type="button"
+            className="owner-receipt-backdrop"
+            onClick={() => setReceiptOrderId("")}
+            aria-label="Close receipt"
+          />
+          <section className="owner-receipt-panel" aria-label="Order receipt">
+            <div className="owner-receipt-handle" aria-hidden="true" />
+            <header className="owner-receipt-header">
+              <h3>Receipt</h3>
+              <p className="owner-receipt-truck">{receiptDetail.truckName}</p>
+              <p className="owner-receipt-order-num">Order #{receiptDetail.orderLabel}</p>
+            </header>
+            <div className="owner-receipt-customer">
+              <strong>{receiptDetail.customerName}</strong>
+              <span>{receiptDetail.school}</span>
+            </div>
+            <ul className="owner-receipt-lines">
+              {receiptDetail.lines.map((line, index) => (
+                <li key={`${line.name}-${index}`}>
+                  <div className="owner-receipt-line-main">
+                    <span className="owner-receipt-line-name">{line.name}</span>
+                    <span className="owner-receipt-line-qty">×{line.qty}</span>
+                  </div>
+                  <div className="owner-receipt-line-sub">
+                    {receiptDetail.isDemo ? (
+                      <span className="owner-receipt-line-price">
+                        {formatCurrency(line.unit)} each
+                      </span>
+                    ) : (
+                      <span className="owner-receipt-line-price">
+                        {formatCurrency(line.unit)} × {line.qty}
+                      </span>
+                    )}
+                    <span className="owner-receipt-line-total">{formatCurrency(line.line)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="owner-receipt-totals">
+              <div className="owner-receipt-total-row">
+                <span>Subtotal</span>
+                <span>{formatCurrency(receiptDetail.subtotal)}</span>
+              </div>
+              <div className="owner-receipt-total-row">
+                <span>Tax & fees</span>
+                <span>{formatCurrency(receiptDetail.tax)}</span>
+              </div>
+              <div className="owner-receipt-total-row owner-receipt-total-final">
+                <span>Total</span>
+                <span>{formatCurrency(receiptDetail.total)}</span>
+              </div>
+            </div>
+            <p className="owner-receipt-note">Demo receipt for owner review.</p>
+            <button
+              type="button"
+              className="owner-receipt-close-cta"
+              onClick={() => setReceiptOrderId("")}
+            >
+              Close
+            </button>
           </section>
         </>
       ) : null}
