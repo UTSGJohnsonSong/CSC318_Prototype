@@ -44,6 +44,17 @@ function CheckIcon() {
   );
 }
 
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="confirmation-share-icon">
+      <path
+        d="M14.6 13.6a2.4 2.4 0 0 0-1.8.82l-4.8-2.74a2.44 2.44 0 0 0 0-1.35l4.8-2.74a2.4 2.4 0 1 0-.73-1.3L7.3 9.03a2.4 2.4 0 1 0 0 1.94l4.77 2.73a2.4 2.4 0 1 0 2.53-0.1Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 function formatPickupClock(waitTimeMin) {
   const pickup = new Date();
   pickup.setMinutes(pickup.getMinutes() + waitTimeMin);
@@ -72,6 +83,7 @@ export default function OrderConfirmationScreen({ order, onBack, onNavigate }) {
   if (!order) return null;
 
   const firstItem = order.items[0];
+  const isCollected = Boolean(order.collectedAtMs);
   const pickupTime = formatPickupClock(order.truck.waitTimeMin);
   const location = order.truck.location ?? "St. George Campus, University of Toronto";
   const orderNumberFallback = `${getTruckInitials(order.truck.name) || "FT"}-00`;
@@ -132,11 +144,17 @@ export default function OrderConfirmationScreen({ order, onBack, onNavigate }) {
           </div>
 
           <div className="confirmation-actions">
-            <button type="button" className="sticky-cta" onClick={onNavigate}>
-              Navigate
+            <button
+              type="button"
+              className="sticky-cta"
+              onClick={isCollected ? undefined : onNavigate}
+              disabled={isCollected}
+            >
+              {isCollected ? "Order picked up" : "Navigate"}
             </button>
-            <button type="button" className="details-secondary-action">
-              Share Order
+            <button type="button" className="details-secondary-action confirmation-share-action">
+              <ShareIcon />
+              <span>Share Order</span>
             </button>
           </div>
         </section>

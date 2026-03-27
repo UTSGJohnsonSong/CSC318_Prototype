@@ -805,6 +805,19 @@ export default function App() {
     setRatingOpen(true);
   };
 
+  const handleOwnerMarkPickedUp = ({ orderNumber }) => {
+    setConfirmedOrder((prev) => {
+      if (!prev) return prev;
+      if (orderNumber && prev.orderNumber !== orderNumber) return prev;
+      if (prev.collectedAtMs) return prev;
+      return {
+        ...prev,
+        collectedAtMs: Date.now(),
+        pickedUpBySeller: true
+      };
+    });
+  };
+
   const handleUploadWaitFeedback = ({ truckId, deltaMin, actualPickupAtMs }) => {
     const nextFeedback = {
       deltaMin,
@@ -881,12 +894,18 @@ export default function App() {
       trucksWithFeedback.find((truck) => truck.id === authState.truckId) ??
       trucksWithFeedback.find((truck) => truck.id === TRUCK_OWNER_DEMO_ID) ??
       null;
+    const ownerLinkedOrder =
+      confirmedOrder && ownerTruck && confirmedOrder.truck.id === ownerTruck.id
+        ? confirmedOrder
+        : null;
 
     return (
       <MobileShell>
         <OwnerDashboardScreen
           truck={ownerTruck}
           ownerName={authState.name}
+          activeOrder={ownerLinkedOrder}
+          onMarkOrderPickedUp={handleOwnerMarkPickedUp}
           onTruckLiveUpdate={handleTruckLiveUpdate}
           onSignOut={handleSignOut}
         />
@@ -965,7 +984,9 @@ export default function App() {
             subtotal={cartTotal}
             taxFees={checkoutTaxFees}
             total={checkoutTotal}
+            paymentMethods={PAYMENT_METHOD_OPTIONS}
             paymentMethod={selectedPaymentMethod}
+            onPaymentMethodChange={handlePaymentMethodChange}
             pickupName={pickupName}
             onPickupNameChange={setPickupName}
             onBack={() => setCheckoutOpen(false)}

@@ -94,6 +94,11 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
     remainingFoodMin > 0 ? `Food ready in ~${remainingFoodMin} min` : "Food ready now";
   const timelineReady = remainingFoodMin <= 0;
   const timelineCollected = Boolean(order.collectedAtMs);
+  const primaryActionLabel = timelineCollected
+    ? order.pickedUpBySeller
+      ? "Picked up by seller"
+      : "Order picked up"
+    : "I have arrived";
   const displayOrderNumber = useMemo(() => {
     if (order.orderNumber) return order.orderNumber;
     return `${getTruckInitials(order.truck.name) || "FT"}-00`;
@@ -522,9 +527,10 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
             <button
               type="button"
               className="sticky-cta nav-status-primary-cta"
-              onClick={onCollected}
+              onClick={timelineCollected ? undefined : onCollected}
+              disabled={timelineCollected}
             >
-              I have arrived
+              {primaryActionLabel}
             </button>
             <button
               type="button"

@@ -1767,6 +1767,7 @@ button {
 }
 
 .checkout-screen {
+  position: relative;
   height: 100%;
   background: linear-gradient(180deg, #fafbfe 0%, #f2f4fb 100%);
   display: flex;
@@ -1980,12 +1981,83 @@ button {
   min-height: 28px;
 }
 
+.checkout-selected-method {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 11px;
+  border: 1px solid #dbe3f1;
+  background: #ffffff;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkout-method-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkout-method-option {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 11px;
+  border: 1px solid #dbe3f1;
+  background: #ffffff;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkout-method-option.selected {
+  border-color: #7ea4f1;
+  background: #f7faff;
+}
+
 .checkout-payment-copy {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
   color: #223047;
+}
+
+.checkout-method-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2a3954;
+}
+
+.checkout-method-copy {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.checkout-method-detail {
+  font-size: 10.5px;
+  color: #72839b;
+}
+
+.checkout-method-indicator {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #7d8cab;
+  flex: 0 0 auto;
+}
+
+.checkout-method-check {
+  width: 16px;
+  height: 16px;
+  color: #2f6bde;
 }
 
 .checkout-card-badge {
@@ -2025,6 +2097,45 @@ button {
   text-align: center;
   font-size: 13px;
   color: #53617b;
+}
+
+.checkout-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(15, 21, 36, 0.36);
+  z-index: 8;
+}
+
+.checkout-method-sheet {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  border-radius: 18px;
+  border: 1px solid #dbe3f1;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(27, 40, 67, 0.22);
+  padding: 10px 10px 12px;
+  z-index: 9;
+}
+
+.checkout-method-sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d5deec;
+  margin: 0 auto 10px;
+}
+
+.checkout-method-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  color: #263550;
+  font-size: 13px;
 }
 
 .confirmation-card {
@@ -2137,6 +2248,28 @@ button {
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
+}
+
+.confirmation-share-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-color: #cfdcf3;
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+  color: #4e6494;
+  box-shadow: 0 2px 8px rgba(51, 84, 146, 0.08);
+}
+
+.confirmation-share-action:active {
+  transform: translateY(1px);
+}
+
+.confirmation-share-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.95;
+  flex: 0 0 auto;
 }
 
 .rating-card {
@@ -2781,6 +2914,10 @@ button {
   font-weight: 780;
 }
 
+.nav-status-primary-cta:disabled {
+  opacity: 0.74;
+}
+
 .nav-status-secondary-cta {
   margin-top: 0;
   height: 34px;
@@ -3141,6 +3278,7 @@ button {
 }
 
 .owner-dashboard-screen {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -3380,6 +3518,11 @@ button {
   padding: 12px;
 }
 
+.owner-order-card.done {
+  border-color: #dde4dc;
+  background: #f6f8f5;
+}
+
 .owner-order-topline {
   display: flex;
   justify-content: space-between;
@@ -3400,6 +3543,20 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0 10px;
+}
+
+.owner-order-done-badge {
+  min-width: 70px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e7eeea;
+  color: #3f6f53;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 0 10px;
 }
 
@@ -3470,10 +3627,19 @@ button {
   color: #2d7a4d;
 }
 
+.owner-order-note.complete {
+  background: #ecefef;
+  color: #66706c;
+}
+
 .owner-order-actions {
   margin-top: 12px;
   display: flex;
   gap: 8px;
+}
+
+.owner-order-card.done .owner-order-actions {
+  justify-content: center;
 }
 
 .owner-order-primary,
@@ -3496,6 +3662,15 @@ button {
   color: #ffffff;
 }
 
+.owner-order-primary.done {
+  background: #d7ddda;
+  color: #5f6a64;
+}
+
+.owner-order-primary:disabled {
+  cursor: default;
+}
+
 .owner-order-secondary {
   min-width: 118px;
   border: 1px solid #e5e9e1;
@@ -3505,6 +3680,12 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
+}
+
+.owner-order-card.done .owner-order-secondary {
+  width: 100%;
+  min-width: 0;
+  max-width: 280px;
 }
 
 .owner-inline-icon {
@@ -3531,6 +3712,70 @@ button {
   gap: 10px;
   font-size: 11px;
   color: #7b8477;
+}
+
+.owner-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(14, 24, 20, 0.38);
+  z-index: 20;
+}
+
+.owner-confirm-dialog {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% - 44px);
+  max-width: 320px;
+  transform: translate(-50%, -50%);
+  border-radius: 16px;
+  border: 1px solid #dfe7de;
+  background: #ffffff;
+  box-shadow: 0 20px 40px rgba(24, 34, 30, 0.22);
+  padding: 14px;
+  z-index: 21;
+}
+
+.owner-confirm-dialog h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #263246;
+}
+
+.owner-confirm-dialog p {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #64706a;
+}
+
+.owner-confirm-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.owner-confirm-secondary,
+.owner-confirm-primary {
+  height: 34px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.owner-confirm-secondary {
+  border: 1px solid #dce4de;
+  background: #f8faf8;
+  color: #5f6c66;
+}
+
+.owner-confirm-primary {
+  border: none;
+  background: linear-gradient(135deg, #38b372 0%, #28955c 100%);
+  color: #ffffff;
 }
 
 .profile-screen {
