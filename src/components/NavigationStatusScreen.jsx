@@ -502,17 +502,6 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
           />
 
           <div className="nav-sheet-content">
-            <div className="nav-sheet-link-row">
-              <button
-                type="button"
-                className="nav-sheet-link"
-                onClick={onBack}
-                aria-label="Back to order confirmation"
-              >
-                My order
-              </button>
-            </div>
-
             <div className="nav-eta-summary">
               <strong>{travelMin} min</strong>
               <span>{distanceMeters} m</span>
@@ -532,10 +521,18 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
 
             <button
               type="button"
-              className="details-secondary-action nav-status-secondary-cta"
+              className="sticky-cta nav-status-primary-cta"
               onClick={onCollected}
             >
               I have arrived
+            </button>
+            <button
+              type="button"
+              className="details-secondary-action nav-status-back-cta"
+              onClick={onBack}
+              aria-label="Back to order confirmation"
+            >
+              Back to my order
             </button>
           </div>
         </section>
