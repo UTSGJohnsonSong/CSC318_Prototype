@@ -1,9 +1,9 @@
 const littlePinkHeroImage = new URL("../../1.jpg", import.meta.url).href;
 const jianbingHeroImage = new URL("../../8.jpg", import.meta.url).href;
 const redGrillHeroImage = new URL("../../3.jpg", import.meta.url).href;
-const flameHeroImage = new URL("../../4.jpg", import.meta.url).href;
-const whiteChineseHeroImage = new URL("../../5.jpg", import.meta.url).href;
-const blueTruckHeroImage = new URL("../../6.jpg", import.meta.url).href;
+const flameHeroImage = new URL("../../11.jpg", import.meta.url).href;
+const whiteChineseHeroImage = new URL("../../4.jpg", import.meta.url).href;
+const blueTruckHeroImage = new URL("../../5.jpg", import.meta.url).href;
 
 const littlePinkCurryImage = new URL(
   "../../Little_Pink_Truck_List/JapaneseCurryChickenRice.jpg",

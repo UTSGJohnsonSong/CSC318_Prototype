@@ -74,6 +74,8 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   const [isRecentering, setIsRecentering] = useState(false);
   const [sheetOffset, setSheetOffset] = useState(0);
   const [sheetDragging, setSheetDragging] = useState(false);
+  /** After landing on nav, timeline moves Preparing → Ready after 10s (demo). */
+  const [navReadyPhase, setNavReadyPhase] = useState(false);
 
   const clampZoom = (value) => Math.max(1.15, Math.min(3.2, value));
   const travelMin = Math.max(1, order.truck.walkTimeMin ?? 3);
@@ -92,8 +94,15 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   const remainingFoodMin = Math.max(0, initialWaitMin - elapsedMin);
   const foodReadyLabel =
     remainingFoodMin > 0 ? `Food ready in ~${remainingFoodMin} min` : "Food ready now";
-  const timelineReady = remainingFoodMin <= 0;
   const timelineCollected = Boolean(order.collectedAtMs);
+  /** Ready step: 10s after opening this screen, or when wait countdown already elapsed. */
+  const timelineReady =
+    !timelineCollected && (navReadyPhase || remainingFoodMin <= 0);
+  const primaryActionLabel = timelineCollected
+    ? order.pickedUpBySeller
+      ? "Picked up by seller"
+      : "Order picked up"
+    : "I have arrived";
   const displayOrderNumber = useMemo(() => {
     if (order.orderNumber) return order.orderNumber;
     return `${getTruckInitials(order.truck.name) || "FT"}-00`;
@@ -348,6 +357,11 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
   }, []);
 
   useEffect(() => {
+    const id = window.setTimeout(() => setNavReadyPhase(true), 10000);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
     if (!sheetRef.current) return;
     const updateHiddenOffset = () => {
       if (!sheetRef.current) return;
@@ -422,11 +436,25 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
           </div>
           <div className="nav-top-progress-bar" aria-label="Order timeline">
             <div className="nav-top-order-number">Order #{displayOrderNumber}</div>
-            <div className="nav-status-timeline nav-status-timeline-top">
-              <span className={!timelineReady && !timelineCollected ? "active" : ""}>
+            <div
+              className={`nav-status-timeline nav-status-timeline-top ${
+                timelineCollected ? "phase-collected" : timelineReady ? "phase-ready" : "phase-preparing"
+              }`}
+            >
+              <span
+                className={
+                  !timelineReady && !timelineCollected ? "active" : "complete"
+                }
+              >
                 Preparing
               </span>
-              <span className={timelineReady && !timelineCollected ? "active" : ""}>Ready</span>
+              <span
+                className={
+                  timelineCollected ? "complete" : timelineReady && !timelineCollected ? "active" : ""
+                }
+              >
+                Ready
+              </span>
               <span className={timelineCollected ? "active" : ""}>Collected</span>
             </div>
           </div>
@@ -502,17 +530,6 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
           />
 
           <div className="nav-sheet-content">
-            <div className="nav-sheet-link-row">
-              <button
-                type="button"
-                className="nav-sheet-link"
-                onClick={onBack}
-                aria-label="Back to order confirmation"
-              >
-                My order
-              </button>
-            </div>
-
             <div className="nav-eta-summary">
               <strong>{travelMin} min</strong>
               <span>{distanceMeters} m</span>
@@ -532,10 +549,19 @@ export default function NavigationStatusScreen({ order, onBack, onCollected }) {
 
             <button
               type="button"
-              className="details-secondary-action nav-status-secondary-cta"
-              onClick={onCollected}
+              className="sticky-cta nav-status-primary-cta"
+              onClick={timelineCollected ? undefined : onCollected}
+              disabled={timelineCollected}
             >
-              I have arrived
+              {primaryActionLabel}
+            </button>
+            <button
+              type="button"
+              className="details-secondary-action nav-status-back-cta"
+              onClick={onBack}
+              aria-label="Back to order confirmation"
+            >
+              Back to my order
             </button>
           </div>
         </section>

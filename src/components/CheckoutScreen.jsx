@@ -1,8 +1,25 @@
+import { useState } from "react";
+
 function ChevronRightIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true" className="checkout-chevron-icon">
       <path
         d="M7.5 4.5 13 10l-5.5 5.5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="checkout-method-check">
+      <path
+        d="m5.5 10.4 2.8 2.8 6.2-6.2"
         fill="none"
         stroke="currentColor"
         strokeLinecap="round"
@@ -32,12 +49,21 @@ export default function CheckoutScreen({
   subtotal,
   taxFees,
   total,
+  paymentMethods,
   paymentMethod,
+  onPaymentMethodChange,
   pickupName,
   onPickupNameChange,
   onBack,
   onConfirm
 }) {
+  const [paymentPickerOpen, setPaymentPickerOpen] = useState(false);
+
+  const handleSelectPaymentMethod = (methodId) => {
+    onPaymentMethodChange?.(methodId);
+    setPaymentPickerOpen(false);
+  };
+
   return (
     <main className="checkout-screen">
       <header className="checkout-header">
@@ -106,16 +132,29 @@ export default function CheckoutScreen({
         <section className="checkout-card checkout-info-card">
           <div className="checkout-info-header">
             <span className="checkout-field-label">Payment Details</span>
-            <span className="checkout-link-button">Profile</span>
+            <button
+              type="button"
+              className="checkout-link-button"
+              onClick={() => setPaymentPickerOpen(true)}
+            >
+              Change
+            </button>
           </div>
           <div className="checkout-info-row">
-            <div className="checkout-payment-copy">
-              <span className="checkout-card-badge" aria-hidden="true">
-                {paymentMethod?.badge ?? "CARD"}
+            <button
+              type="button"
+              className="checkout-selected-method"
+              onClick={() => setPaymentPickerOpen(true)}
+              aria-label="Change payment method"
+            >
+              <span className="checkout-payment-copy">
+                <span className="checkout-card-badge" aria-hidden="true">
+                  {paymentMethod?.badge ?? "CARD"}
+                </span>
+                <span className="checkout-method-summary">{paymentMethod?.summary ?? "•••• 1234"}</span>
               </span>
-              <span>{paymentMethod?.summary ?? "•••• 1234"}</span>
-            </div>
-            <ChevronRightIcon />
+              <ChevronRightIcon />
+            </button>
           </div>
 
           <div className="checkout-divider" />
@@ -139,6 +178,51 @@ export default function CheckoutScreen({
         </button>
         <div className="checkout-total-footer">Total: CAD ${total.toFixed(2)}</div>
       </footer>
+
+      {paymentPickerOpen ? (
+        <>
+          <button
+            type="button"
+            className="checkout-sheet-backdrop"
+            onClick={() => setPaymentPickerOpen(false)}
+            aria-label="Close payment methods"
+          />
+          <section className="checkout-method-sheet" aria-label="Select payment method">
+            <div className="checkout-method-sheet-handle" />
+            <div className="checkout-method-sheet-header">
+              <strong>Payment Method</strong>
+            </div>
+            <div className="checkout-method-list" role="radiogroup" aria-label="Checkout payment method">
+              {(paymentMethods ?? []).map((method) => {
+                const selected = method.id === paymentMethod?.id;
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    className={`checkout-method-option ${selected ? "selected" : ""}`}
+                    onClick={() => handleSelectPaymentMethod(method.id)}
+                    role="radio"
+                    aria-checked={selected}
+                  >
+                    <span className="checkout-payment-copy">
+                      <span className="checkout-card-badge" aria-hidden="true">
+                        {method.badge}
+                      </span>
+                      <span className="checkout-method-copy">
+                        <span className="checkout-method-summary">{method.summary}</span>
+                        <span className="checkout-method-detail">{method.detail}</span>
+                      </span>
+                    </span>
+                    <span className="checkout-method-indicator" aria-hidden="true">
+                      {selected ? <CheckIcon /> : <ChevronRightIcon />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </>
+      ) : null}
     </main>
   );
 }

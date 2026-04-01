@@ -5,6 +5,21 @@ function formatMinutesLabel(minutes) {
   return `${minutes} min`;
 }
 
+function formatCurrency(total) {
+  return `C$${Number(total ?? 0).toFixed(2)}`;
+}
+
+function parseCadFromLabel(label) {
+  const m = String(label ?? "").match(/[\d.]+/);
+  return m ? Number.parseFloat(m[0]) : 0;
+}
+
+function parseSummaryLine(summary) {
+  const m = String(summary ?? "").match(/^(.*?)\s*x(\d+)$/i);
+  if (m) return { name: m[1].trim(), qty: Number(m[2]) };
+  return { name: String(summary ?? "Item").trim(), qty: 1 };
+}
+
 function createOwnerDemoOrders(truck) {
   const firstItem = truck?.menu?.[0];
   const secondItem = truck?.menu?.[1] ?? firstItem;
@@ -33,6 +48,39 @@ function createOwnerDemoOrders(truck) {
       status: "waiting"
     },
     {
+      id: "0427",
+      customerName: "Noah Lee",
+      school: "University of Toronto",
+      summary: `${firstItem?.name ?? "Combo"} x1`,
+      totalLabel: "C$15.59",
+      estWaitMin: 10,
+      arrivalMin: 4,
+      createdAgoMin: 5,
+      status: "waiting"
+    },
+    {
+      id: "0428",
+      customerName: "Mia Patel",
+      school: "University of Toronto",
+      summary: `${secondItem?.name ?? "Rice Bowl"} x1`,
+      totalLabel: "C$16.79",
+      estWaitMin: 11,
+      arrivalMin: 6,
+      createdAgoMin: 6,
+      status: "waiting"
+    },
+    {
+      id: "0429",
+      customerName: "Daniel Kim",
+      school: "University of Toronto",
+      summary: `${firstItem?.name ?? "Combo"} x2`,
+      totalLabel: "C$31.18",
+      estWaitMin: 9,
+      arrivalMin: 5,
+      createdAgoMin: 8,
+      status: "waiting"
+    },
+    {
       id: "0425",
       customerName: "Emma Thompson",
       school: "University of Toronto",
@@ -55,6 +103,18 @@ function createOwnerDemoOrders(truck) {
       createdAgoMin: 9,
       status: "pickup",
       notifiedLabel: "Ready for pickup 2 min ago"
+    },
+    {
+      id: "0430",
+      customerName: "Sophia Chen",
+      school: "University of Toronto",
+      summary: `${firstItem?.name ?? "Combo"} x1`,
+      totalLabel: "C$15.59",
+      estWaitMin: 6,
+      arrivalMin: 1,
+      createdAgoMin: 10,
+      status: "pickup",
+      notifiedLabel: "Ready for pickup 3 min ago"
     }
   ];
 }
@@ -66,6 +126,37 @@ function createAvatarLabel(name) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2);
+}
+
+function buildLiveOrderFromAppOrder(order, nowMs) {
+  if (!order) return null;
+
+  const createdAgoMin = Math.max(1, Math.floor((nowMs - (order.createdAtMs ?? nowMs)) / 60000));
+  const readyAtMs = order.readyAtMs ?? nowMs;
+  const remainingWaitMin = Math.max(0, Math.ceil((readyAtMs - nowMs) / 60000));
+  const isCollected = Boolean(order.collectedAtMs);
+  const isReady = !isCollected && remainingWaitMin <= 0;
+  const summary =
+    order.items?.map((item) => `${item.name} x${item.quantity}`).join(", ") || "Order items";
+
+  return {
+    id: `live-${order.orderNumber ?? "order"}`,
+    linkedOrderNumber: order.orderNumber ?? "",
+    customerName: order.pickupName?.trim() || "Student pickup",
+    school: "University of Toronto",
+    summary,
+    totalLabel: formatCurrency(order.total),
+    estWaitMin: Math.max(1, remainingWaitMin || order.truck.waitTimeMin || 1),
+    arrivalMin: Math.max(1, order.truck.walkTimeMin ?? 3),
+    createdAgoMin,
+    status: isCollected ? "complete" : isReady ? "pickup" : "waiting",
+    notifiedLabel: isCollected
+      ? "Picked up"
+      : isReady
+        ? "Ready for pickup"
+        : `Student arriving in ${formatMinutesLabel(Math.max(1, order.truck.walkTimeMin ?? 3))}`,
+    source: "live"
+  };
 }
 
 function ReceiptIcon() {
@@ -84,17 +175,40 @@ function ReceiptIcon() {
   );
 }
 
-export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpdate, onSignOut }) {
+export default function OwnerDashboardScreen({
+  truck,
+  ownerName,
+  activeOrder,
+  onMarkOrderPickedUp,
+  onTruckLiveUpdate,
+  onSignOut
+}) {
   const [activeTab, setActiveTab] = useState("waiting");
   const [orders, setOrders] = useState(() => createOwnerDemoOrders(truck));
   const [selectedOrderId, setSelectedOrderId] = useState("0424");
+  const [nowMs, setNowMs] = useState(Date.now());
+  const [confirmingOrderId, setConfirmingOrderId] = useState("");
+  const [receiptOrderId, setReceiptOrderId] = useState("");
   const [activityMessage, setActivityMessage] = useState(
     "Demo dashboard loaded for UT Little Pink Truck. Choose an order when the meal is ready."
   );
 
   useEffect(() => {
     setOrders(createOwnerDemoOrders(truck));
-  }, [truck]);
+  }, [truck?.id]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setOrders((prev) => {
+      const withoutLive = prev.filter((order) => order.source !== "live");
+      const nextLiveOrder = buildLiveOrderFromAppOrder(activeOrder, nowMs);
+      return nextLiveOrder ? [nextLiveOrder, ...withoutLive] : withoutLive;
+    });
+  }, [activeOrder, nowMs]);
 
   const waitingOrders = useMemo(
     () => orders.filter((order) => order.status === "waiting"),
@@ -104,13 +218,28 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
     () => orders.filter((order) => order.status === "pickup"),
     [orders]
   );
+  const pickupTabOrders = useMemo(() => {
+    const sorted = [...orders].filter(
+      (order) => order.status === "pickup" || order.status === "complete"
+    );
+    return sorted.sort((first, second) => {
+      const firstDone = first.status === "complete" ? 1 : 0;
+      const secondDone = second.status === "complete" ? 1 : 0;
+      if (firstDone !== secondDone) return firstDone - secondDone;
+      if (firstDone === 1 && secondDone === 1) {
+        return (first.completedAtMs ?? 0) - (second.completedAtMs ?? 0);
+      }
+      return first.createdAgoMin - second.createdAgoMin;
+    });
+  }, [orders]);
   const completedOrders = useMemo(
     () => orders.filter((order) => order.status === "complete"),
     [orders]
   );
 
-  const tabOrders = activeTab === "waiting" ? waitingOrders : pickupOrders;
-  const selectableOrders = tabOrders.length ? tabOrders : activeTab === "waiting" ? pickupOrders : waitingOrders;
+  const tabOrders = activeTab === "waiting" ? waitingOrders : pickupTabOrders;
+  const fallbackOrders = activeTab === "waiting" ? pickupTabOrders : waitingOrders;
+  const selectableOrders = tabOrders.length ? tabOrders : fallbackOrders;
 
   useEffect(() => {
     if (!selectableOrders.length) {
@@ -163,7 +292,6 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
       )
     );
     setSelectedOrderId(orderId);
-    setActiveTab("pickup");
     setActivityMessage(`Pickup notification sent to ${currentOrder.customerName}.`);
   };
 
@@ -177,13 +305,85 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
           ? {
               ...order,
               status: "complete",
-              notifiedLabel: "Picked up"
+              notifiedLabel: "Picked up",
+              completedAtMs: Date.now()
             }
           : order
       )
     );
     setActivityMessage(`${currentOrder.customerName} has collected the order.`);
+    if (currentOrder.source === "live") {
+      onMarkOrderPickedUp?.({ orderNumber: currentOrder.linkedOrderNumber });
+    }
   };
+
+  const handleMarkPickedUpRequest = (orderId) => {
+    setConfirmingOrderId(orderId);
+  };
+
+  const handleMarkPickedUpConfirm = () => {
+    if (!confirmingOrderId) return;
+    handleMarkPickedUp(confirmingOrderId);
+    setConfirmingOrderId("");
+  };
+
+  const handleMarkPickedUpCancel = () => {
+    setConfirmingOrderId("");
+  };
+
+  const receiptOrder = useMemo(
+    () => (receiptOrderId ? orders.find((o) => o.id === receiptOrderId) ?? null : null),
+    [orders, receiptOrderId]
+  );
+
+  const receiptDetail = useMemo(() => {
+    if (!receiptOrder || !truck) return null;
+
+    const isLinkedLive =
+      receiptOrder.source === "live" &&
+      activeOrder?.orderNumber &&
+      receiptOrder.linkedOrderNumber === activeOrder.orderNumber;
+
+    if (isLinkedLive && activeOrder.items?.length) {
+      const subtotal = activeOrder.subtotal ?? 0;
+      const tax = activeOrder.taxFees ?? 0;
+      const total = activeOrder.total ?? subtotal + tax;
+      return {
+        orderLabel: activeOrder.orderNumber,
+        customerName: activeOrder.pickupName?.trim() || receiptOrder.customerName,
+        school: receiptOrder.school,
+        lines: activeOrder.items.map((item) => ({
+          name: item.name,
+          qty: item.quantity,
+          unit: item.priceCad,
+          line: Number((item.priceCad * item.quantity).toFixed(2))
+        })),
+        subtotal,
+        tax,
+        total,
+        truckName: activeOrder.truck?.name ?? truck.name,
+        isDemo: false
+      };
+    }
+
+    const total = parseCadFromLabel(receiptOrder.totalLabel);
+    const subtotal = Number((total / 1.125).toFixed(2));
+    const tax = Number((total - subtotal).toFixed(2));
+    const { name, qty } = parseSummaryLine(receiptOrder.summary);
+    const unit = qty > 0 ? Number((subtotal / qty).toFixed(2)) : subtotal;
+
+    return {
+      orderLabel: String(receiptOrder.id),
+      customerName: receiptOrder.customerName,
+      school: receiptOrder.school,
+      lines: [{ name, qty, unit, line: subtotal }],
+      subtotal,
+      tax,
+      total,
+      truckName: truck.name,
+      isDemo: true
+    };
+  }, [activeOrder, receiptOrder, truck]);
 
   if (!truck) return null;
 
@@ -248,7 +448,13 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
         <section className="owner-highlight-card">
           <div className="owner-highlight-copy">
             <strong>Heads up! Student is arriving in:</strong>
-            <span>{selectedOrder ? formatMinutesLabel(selectedOrder.arrivalMin) : "No active orders"}</span>
+            <span>
+              {selectedOrder
+                ? selectedOrder.status === "complete"
+                  ? "Completed"
+                  : formatMinutesLabel(selectedOrder.arrivalMin)
+                : "No active orders"}
+            </span>
           </div>
           <select
             className="owner-highlight-select"
@@ -268,12 +474,19 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
         <div className="owner-order-list">
           {tabOrders.map((order) => {
             const isPickup = order.status === "pickup";
+            const isDone = order.status === "complete";
 
             return (
-              <article key={order.id} className="owner-order-card">
+              <article key={order.id} className={`owner-order-card ${isDone ? "done" : ""}`}>
                 <div className="owner-order-topline">
                   <span>Order #{order.id}</span>
-                  <span className="owner-order-timer">{formatMinutesLabel(order.createdAgoMin)}</span>
+                  {isDone ? (
+                    <span className="owner-order-done-badge" aria-label="Order completed">
+                      ✓ Done
+                    </span>
+                  ) : (
+                    <span className="owner-order-timer">{formatMinutesLabel(order.createdAgoMin)}</span>
+                  )}
                 </div>
 
                 <div className="owner-order-main">
@@ -289,23 +502,33 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
                       <span>Est. Wait: {formatMinutesLabel(order.estWaitMin)}</span>
                       <span>{order.totalLabel}</span>
                     </div>
-                    <div className={`owner-order-note ${isPickup ? "pickup" : "waiting"}`}>
-                      {isPickup
-                        ? order.notifiedLabel ?? "Ready for pickup"
-                        : `Student arriving in ${formatMinutesLabel(order.arrivalMin)}`}
+                    <div className={`owner-order-note ${isDone ? "complete" : isPickup ? "pickup" : "waiting"}`}>
+                      {isDone
+                        ? "Order completed"
+                        : isPickup
+                          ? order.notifiedLabel ?? "Ready for pickup"
+                          : `Student arriving in ${formatMinutesLabel(order.arrivalMin)}`}
                     </div>
                   </div>
                 </div>
 
                 <div className="owner-order-actions">
+                  {!isDone ? (
+                    <button
+                      type="button"
+                      className={`owner-order-primary ${isPickup ? "pickup" : ""}`}
+                      onClick={() =>
+                        isPickup ? handleMarkPickedUpRequest(order.id) : handleNotifyReady(order.id)
+                      }
+                    >
+                      {isPickup ? "Mark picked up" : "Notify ready"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    className={`owner-order-primary ${isPickup ? "pickup" : ""}`}
-                    onClick={() => (isPickup ? handleMarkPickedUp(order.id) : handleNotifyReady(order.id))}
+                    className="owner-order-secondary"
+                    onClick={() => setReceiptOrderId(order.id)}
                   >
-                    {isPickup ? "Mark picked up" : "Notify ready"}
-                  </button>
-                  <button type="button" className="owner-order-secondary">
                     <ReceiptIcon />
                     <span>View receipt</span>
                   </button>
@@ -328,6 +551,104 @@ export default function OwnerDashboardScreen({ truck, ownerName, onTruckLiveUpda
           <span>Front-end demo only</span>
         </footer>
       </section>
+
+      {confirmingOrderId ? (
+        <>
+          <button
+            type="button"
+            className="owner-confirm-backdrop"
+            onClick={handleMarkPickedUpCancel}
+            aria-label="Close pickup confirmation"
+          />
+          <section className="owner-confirm-dialog" aria-label="Confirm pickup">
+            <h3>Confirm pickup?</h3>
+            <p>Has this order been picked up by the student?</p>
+            <div className="owner-confirm-actions">
+              <button
+                type="button"
+                className="owner-confirm-secondary"
+                onClick={handleMarkPickedUpCancel}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="owner-confirm-primary"
+                onClick={handleMarkPickedUpConfirm}
+              >
+                Confirm
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {receiptOrderId && receiptDetail ? (
+        <>
+          <button
+            type="button"
+            className="owner-receipt-backdrop"
+            onClick={() => setReceiptOrderId("")}
+            aria-label="Close receipt"
+          />
+          <section className="owner-receipt-panel" aria-label="Order receipt">
+            <div className="owner-receipt-handle" aria-hidden="true" />
+            <header className="owner-receipt-header">
+              <h3>Receipt</h3>
+              <p className="owner-receipt-truck">{receiptDetail.truckName}</p>
+              <p className="owner-receipt-order-num">Order #{receiptDetail.orderLabel}</p>
+            </header>
+            <div className="owner-receipt-customer">
+              <strong>{receiptDetail.customerName}</strong>
+              <span>{receiptDetail.school}</span>
+            </div>
+            <ul className="owner-receipt-lines">
+              {receiptDetail.lines.map((line, index) => (
+                <li key={`${line.name}-${index}`}>
+                  <div className="owner-receipt-line-main">
+                    <span className="owner-receipt-line-name">{line.name}</span>
+                    <span className="owner-receipt-line-qty">×{line.qty}</span>
+                  </div>
+                  <div className="owner-receipt-line-sub">
+                    {receiptDetail.isDemo ? (
+                      <span className="owner-receipt-line-price">
+                        {formatCurrency(line.unit)} each
+                      </span>
+                    ) : (
+                      <span className="owner-receipt-line-price">
+                        {formatCurrency(line.unit)} × {line.qty}
+                      </span>
+                    )}
+                    <span className="owner-receipt-line-total">{formatCurrency(line.line)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="owner-receipt-totals">
+              <div className="owner-receipt-total-row">
+                <span>Subtotal</span>
+                <span>{formatCurrency(receiptDetail.subtotal)}</span>
+              </div>
+              <div className="owner-receipt-total-row">
+                <span>Tax & fees</span>
+                <span>{formatCurrency(receiptDetail.tax)}</span>
+              </div>
+              <div className="owner-receipt-total-row owner-receipt-total-final">
+                <span>Total</span>
+                <span>{formatCurrency(receiptDetail.total)}</span>
+              </div>
+            </div>
+            <p className="owner-receipt-note">Demo receipt for owner review.</p>
+            <button
+              type="button"
+              className="owner-receipt-close-cta"
+              onClick={() => setReceiptOrderId("")}
+            >
+              Close
+            </button>
+          </section>
+        </>
+      ) : null}
     </main>
   );
 }
